@@ -229,6 +229,8 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
   } else {
     Game.systems.drawCharacterLabels(worldRef, cameraWorld, renderState);
   }
+
+  Game.systems.drawDialogueOverlay(worldRef, renderState);
 };
 
 Game.systems.drawCharacterLabels = function drawCharacterLabels(
@@ -343,9 +345,16 @@ Game.systems.drawDebugOverlay = function drawDebugOverlay(
     const label = labelData.text ?? `entity:${entity}`;
 
     const pos = transform.pos;
-    const posText = `${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(
+    const displayPos = isPainting
+      ? {
+          x: pos.x - collider.w / 2,
+          y: pos.y,
+          z: pos.z - collider.d / 2,
+        }
+      : pos;
+    const posText = `${displayPos.x.toFixed(2)}, ${displayPos.y.toFixed(
       2
-    )}`;
+    )}, ${displayPos.z.toFixed(2)}`;
 
     const center = { x: pos.x, y: pos.y + collider.h / 2, z: pos.z };
     const worldPos = Game.utils.gameToWorld(center);
@@ -383,4 +392,73 @@ Game.systems.drawDebugOverlay = function drawDebugOverlay(
     text(`${label} (${posText})`, 0, 0);
     pop();
   }
+};
+
+Game.systems.drawDialogueOverlay = function drawDialogueOverlay(
+  worldRef,
+  renderState
+) {
+  if (!worldRef || !renderState?.uiFont) {
+    return;
+  }
+
+  const cameraId = worldRef.resources.cameraId;
+  const dialogueState = cameraId
+    ? worldRef.components.DialogueState.get(cameraId)
+    : null;
+  if (!dialogueState || dialogueState.mode !== "dialogue") {
+    return;
+  }
+
+  const dialogue = worldRef.components.Dialogue.get(dialogueState.targetId);
+  if (!dialogue) {
+    return;
+  }
+
+  const lines = Array.isArray(dialogue.lines) ? dialogue.lines : [];
+  const message = lines.length > 0 ? lines.join("\n") : "";
+  if (!message) {
+    return;
+  }
+
+  resetMatrix();
+  blendMode(BLEND);
+  noLights();
+  Game.rendering.clearTexture();
+
+  textFont(renderState.uiFont);
+  textSize(16);
+  textLeading(20);
+  textAlign(LEFT, TOP);
+  if (typeof textWrap === "function") {
+    textWrap(WORD);
+  }
+
+  const margin = 24;
+  const padding = 16;
+  const boxWidth = Math.min(width - margin * 2, 520);
+  const boxHeight = Math.min(height * 0.28, 160);
+  const originX = -width / 2 + margin;
+  const originY = height / 2 - margin - boxHeight;
+
+  noStroke();
+  fill(15, 18, 24, 220);
+  rect(originX, originY, boxWidth, boxHeight, 8);
+
+  let textX = originX + padding;
+  let textY = originY + padding;
+  if (dialogue.name) {
+    fill(200);
+    textSize(13);
+    text(dialogue.name, textX, textY);
+    textY += 18;
+    textSize(16);
+  }
+
+  const textColor =
+    Array.isArray(dialogue.color) && dialogue.color.length >= 3
+      ? dialogue.color
+      : [255, 255, 255];
+  fill(textColor[0], textColor[1], textColor[2]);
+  text(message, textX, textY, boxWidth - padding * 2, boxHeight - padding * 2);
 };

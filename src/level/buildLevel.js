@@ -8,6 +8,7 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
   const playerDef = level.player || {};
   const playerSpriteDef = playerDef.sprite || {};
   const renderingDef = level.rendering || {};
+  const interactionDef = level.interaction || {};
   const playerSize = playerDef.size || { w: 1, d: 1, h: 1.5 };
   const playerSpeed = playerDef.speed ?? 4;
   const playerTurnSpeed = playerDef.turnSpeed ?? 2.6;
@@ -38,6 +39,25 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     worldRef.resources.rendering.occluderFadeDistance;
   worldRef.resources.rendering.occluderAmbient =
     renderingDef.occluderAmbient ?? worldRef.resources.rendering.occluderAmbient;
+  const interactionDefaults = {
+    range: interactionDef.range ?? 1.5,
+    lightboxDistanceScale: interactionDef.lightboxDistanceScale ?? 1.4,
+    lightboxDistanceOffset: interactionDef.lightboxDistanceOffset ?? 0.6,
+    lightboxYOffset: interactionDef.lightboxYOffset ?? 0,
+    dialogueDistanceScale:
+      interactionDef.dialogueDistanceScale ??
+      interactionDef.lightboxDistanceScale ??
+      1.6,
+    dialogueDistanceOffset:
+      interactionDef.dialogueDistanceOffset ??
+      interactionDef.lightboxDistanceOffset ??
+      0.8,
+    dialogueYOffset: interactionDef.dialogueYOffset ?? 0,
+    dialogueShoulderOffset:
+      interactionDef.dialogueShoulderOffset ??
+      interactionDef.dialogueSide ??
+      0.6,
+  };
 
   const blocks = level.blocks || [];
   for (const block of blocks) {
@@ -129,6 +149,67 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
       color: npcDef.color || [70, 110, 200],
       kind: "npc",
     });
+    const npcDialogue = npcDef.dialogue;
+    let dialoguePayload = null;
+    if (typeof npcDialogue === "string") {
+      dialoguePayload = { lines: [npcDialogue] };
+    } else if (Array.isArray(npcDialogue)) {
+      dialoguePayload = { lines: npcDialogue };
+    } else if (npcDialogue && typeof npcDialogue === "object") {
+      const lines = Array.isArray(npcDialogue.lines)
+        ? npcDialogue.lines
+        : npcDialogue.text
+        ? [npcDialogue.text]
+        : [];
+      dialoguePayload = {
+        name: npcDialogue.name,
+        lines,
+        color: npcDialogue.color,
+        camera:
+          npcDialogue.camera && typeof npcDialogue.camera === "object"
+            ? npcDialogue.camera
+            : null,
+      };
+    }
+
+    if (dialoguePayload) {
+      const cameraDefaults = dialoguePayload.camera || {};
+      Game.ecs.addComponent(worldRef, "Dialogue", npc, {
+        name:
+          dialoguePayload.name ??
+          npcDef.label ??
+          npcDef.name ??
+          npcDef.id ??
+          `npc-${i + 1}`,
+        lines: dialoguePayload.lines,
+        color: dialoguePayload.color || null,
+        camera: {
+          distanceScale:
+            cameraDefaults.distanceScale ??
+            interactionDefaults.dialogueDistanceScale,
+          distanceOffset:
+            cameraDefaults.distanceOffset ??
+            interactionDefaults.dialogueDistanceOffset,
+          yOffset: cameraDefaults.yOffset ?? interactionDefaults.dialogueYOffset,
+          shoulderOffset:
+            cameraDefaults.shoulderOffset ??
+            cameraDefaults.side ??
+            interactionDefaults.dialogueShoulderOffset,
+        },
+      });
+    }
+
+    const npcInteraction = npcDef.interaction ?? (dialoguePayload ? {} : null);
+    if (npcInteraction !== null && npcInteraction !== false) {
+      const interactionConfig =
+        npcInteraction && typeof npcInteraction === "object"
+          ? npcInteraction
+          : {};
+      Game.ecs.addComponent(worldRef, "Interaction", npc, {
+        kind: interactionConfig.kind || interactionConfig.type || "dialogue",
+        range: interactionConfig.range ?? interactionDefaults.range,
+      });
+    }
     const spriteWidth = npcSprite.width ?? defaultSpriteWidth;
     const spriteHeight = npcSprite.height ?? defaultSpriteHeight;
     const spriteOffsetY =
@@ -205,8 +286,8 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
 
     const bottomCenter = {
       x: anchorPos.x + width / 2,
-      y: anchorPos.y - height,
-      z: anchorPos.z,
+      y: anchorPos.y,
+      z: anchorPos.z + depth / 2,
     };
 
     Game.ecs.addComponent(worldRef, "Transform", painting, {
@@ -222,6 +303,29 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
       color: paintingDef.color || [255, 255, 255],
       kind: "painting",
     });
+    const interactionData = paintingDef.interaction;
+    if (interactionData !== false) {
+      const interactionConfig =
+        interactionData && typeof interactionData === "object"
+          ? interactionData
+          : {};
+      Game.ecs.addComponent(worldRef, "Interaction", painting, {
+        kind: interactionConfig.kind || interactionConfig.type || "lightbox",
+        range: interactionConfig.range ?? interactionDefaults.range,
+      });
+    }
+    const lightboxData = paintingDef.lightbox;
+    if (lightboxData !== false) {
+      const lightboxConfig =
+        lightboxData && typeof lightboxData === "object" ? lightboxData : {};
+      Game.ecs.addComponent(worldRef, "Lightbox", painting, {
+        distanceScale:
+          lightboxConfig.distanceScale ?? interactionDefaults.lightboxDistanceScale,
+        distanceOffset:
+          lightboxConfig.distanceOffset ?? interactionDefaults.lightboxDistanceOffset,
+        yOffset: lightboxConfig.yOffset ?? interactionDefaults.lightboxYOffset,
+      });
+    }
     Game.ecs.addComponent(worldRef, "BillboardSprite", painting, {
       front: frontKey,
       back: backKey,
@@ -260,6 +364,17 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
   });
   Game.ecs.addComponent(worldRef, "CameraRig", cameraEntity, {
     yaw: worldRef.components.Transform.get(player).rotY,
+  });
+  Game.ecs.addComponent(worldRef, "Lightbox", cameraEntity, {
+    mode: "follow",
+    targetId: null,
+    distanceScale: interactionDefaults.lightboxDistanceScale,
+    distanceOffset: interactionDefaults.lightboxDistanceOffset,
+    yOffset: interactionDefaults.lightboxYOffset,
+  });
+  Game.ecs.addComponent(worldRef, "DialogueState", cameraEntity, {
+    mode: "idle",
+    targetId: null,
   });
   worldRef.resources.cameraId = cameraEntity;
 };

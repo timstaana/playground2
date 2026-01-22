@@ -72,12 +72,31 @@ function keyPressed() {
   }
 }
 
+function mousePressed() {
+  if (Game.systems?.inputState) {
+    Game.systems.inputState.clickRequested = true;
+  }
+}
+
 function updateSystems(worldRef, dt) {
   Game.systems.inputSystem(worldRef);
-  Game.systems.cameraControlSystem(worldRef, dt);
-  Game.systems.movementSystem(worldRef, dt);
-  Game.systems.gravitySystem(worldRef, dt);
-  Game.systems.physicsSystem(worldRef, dt);
+  Game.systems.interactionSystem(worldRef);
+  const cameraId = worldRef.resources.cameraId;
+  const lightbox = cameraId
+    ? worldRef.components.Lightbox.get(cameraId)
+    : null;
+  const dialogueState = cameraId
+    ? worldRef.components.DialogueState.get(cameraId)
+    : null;
+  const locked =
+    (lightbox && lightbox.mode === "lightbox") ||
+    (dialogueState && dialogueState.mode === "dialogue");
+  if (!locked) {
+    Game.systems.cameraControlSystem(worldRef, dt);
+    Game.systems.movementSystem(worldRef, dt);
+    Game.systems.gravitySystem(worldRef, dt);
+    Game.systems.physicsSystem(worldRef, dt);
+  }
   Game.systems.cameraSystem(worldRef);
 }
 
