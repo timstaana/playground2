@@ -5,7 +5,7 @@
   "rendering": {
     "occluderAlpha": 0.35,
     "occluderDitherScale": 1,
-    "occluderConeRadius": 1.4,
+    "occluderConeRadius": 0.6,
     "occluderConeHeight": 0.9,
     "occluderConeSamples": 12,
     "occluderConeRings": 3,
