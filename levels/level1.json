@@ -101,6 +101,21 @@
       "height": 1,
       "billboard": false,
       "animate": true
+    },
+    {
+      "id": "art-02",
+      "image": "assets/art/dance.gif",
+      "pos": {
+        "x": 1,
+        "y": 1.9,
+        "z": 4
+      },
+      "yaw": 1.57,
+      "width": 1,
+      "height": 1,
+      "billboard": true,
+      "animate": true,
+      "fps": 30
     }
   ],
   "blocks": [
