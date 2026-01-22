@@ -88,10 +88,10 @@ Game.ui.renderDialogueOverlay = function renderDialogueOverlay(worldRef) {
       const lines = Array.isArray(dialogue?.lines) ? dialogue.lines : [];
       const message = lines.length > 0 ? lines.join("\n") : "";
       if (message) {
-        const margin = 24;
+        const margin = 18;
         const padding = 16;
-        const boxWidth = Math.min(width - margin * 2, 520);
-        const boxHeight = Math.min(height * 0.28, 170);
+        const boxWidth = Math.max(0, width - margin * 2);
+        const boxHeight = Math.min(height * 0.28, 190);
         const x = margin;
         const y = height - margin - boxHeight;
 

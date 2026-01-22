@@ -17,7 +17,7 @@ Game.systems.cameraControlSystem = function cameraControlSystem(worldRef, dt) {
     }
 
     const targetTransform = worldRef.components.Transform.get(target);
-    if (targetTransform) {
+    if (targetTransform && !worldRef.components.Player.has(target)) {
       targetTransform.rotY = rig.yaw;
       worldRef.components.Transform.set(target, targetTransform);
     }

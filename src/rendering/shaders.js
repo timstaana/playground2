@@ -22,6 +22,7 @@ uniform vec2 uTextureSize;
 uniform vec3 uOutlineColor;
 uniform float uOutlineThickness;
 uniform float uEnableOutline;
+uniform float uOutlineOnly;
 varying vec2 vTexCoord;
 void main() {
   vec4 texColor = texture2D(uTexture, vTexCoord);
@@ -44,9 +45,17 @@ void main() {
     border += step(vTexCoord.y, texel.y);
     border += step(1.0 - texel.y, vTexCoord.y);
     border = clamp(border, 0.0, 1.0) * step(uAlphaCutoff, alpha);
-    if (edge > 0.0 || border > 0.0) {
-      gl_FragColor = vec4(uOutlineColor, 1.0);
-      return;
+    if (uOutlineOnly > 0.5) {
+      if (edge > 0.0 || border > 0.0) {
+        gl_FragColor = vec4(uOutlineColor, 1.0);
+        return;
+      }
+      discard;
+    } else {
+      if (edge > 0.0 || border > 0.0) {
+        gl_FragColor = vec4(uOutlineColor, 1.0);
+        return;
+      }
     }
   }
   if (alpha < uAlphaCutoff) {

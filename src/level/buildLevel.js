@@ -448,6 +448,7 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     lookOffsetY: 0,
     focusBlend: 0,
     dialogueTargetId: null,
+    facingDir: 1,
     lookAt: {
       x: spawn.x,
       y: spawn.y + initialLookHeight,

@@ -319,7 +319,7 @@ Game.systems.scanInteractionTargets = function scanInteractionTargets(
         interaction?.highlightThickness ??
           interaction?.outlineThickness ??
           interaction?.highlightScale ??
-          6
+          15
       );
       if (highlightMap) {
         highlightMap.set(entity, {

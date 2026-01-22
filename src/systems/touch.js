@@ -13,6 +13,8 @@ Game.systems.ensureTouchState = function ensureTouchState() {
       knob: { x: 0, y: 0 },
       radius: 60,
       deadZone: 0.12,
+      deadZoneX: 0.12,
+      deadZoneY: 0.28,
       dragThreshold: 10,
       jumpId: null,
       multiTouch: false,

@@ -20,6 +20,8 @@ Game.systems.inputState = {
     knob: { x: 0, y: 0 },
     radius: 60,
     deadZone: 0.12,
+    deadZoneX: 0.12,
+    deadZoneY: 0.28,
     dragThreshold: 10,
     jumpId: null,
     pending: new Map(),
@@ -50,9 +52,13 @@ Game.systems.inputSystem = function inputSystem(worldRef) {
     const scale = dist > radius ? radius / dist : 1;
     let nx = (dx * scale) / radius;
     let ny = (dy * scale) / radius;
-    const mag = Math.hypot(nx, ny);
-    if (mag < (touch.deadZone ?? 0.12)) {
+    const deadZone = touch.deadZone ?? 0.12;
+    const deadZoneX = touch.deadZoneX ?? deadZone;
+    const deadZoneY = touch.deadZoneY ?? deadZone;
+    if (Math.abs(nx) < deadZoneX) {
       nx = 0;
+    }
+    if (Math.abs(ny) < deadZoneY) {
       ny = 0;
     }
     touch.value.x = nx;

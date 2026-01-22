@@ -96,6 +96,7 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
         (center.z - cameraPos.z) * viewDir.z;
 
       if (spriteTex && Game.rendering.isValidTexture(tex)) {
+        const isPainting = worldRef.components.Painting.has(entity);
         const highlight = worldRef.components.Highlight.get(entity);
         const outline =
           highlight && Array.isArray(highlight.color)
@@ -113,6 +114,7 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
           billboardPitch,
           isMoving: shouldAnimate,
           outline,
+          isPainting,
           depth,
         });
         continue;
@@ -233,31 +235,50 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
           draw.spriteTex.source?.height ||
           1;
 
-        renderState.spriteShader.setUniform("uTexture", draw.tex);
-        renderState.spriteShader.setUniform(
-          "uAlphaCutoff",
-          draw.sprite.alphaCutoff ?? 0.4
-        );
-        renderState.spriteShader.setUniform(
-          "uTextureSize",
-          [texWidth, texHeight]
-        );
-        renderState.spriteShader.setUniform(
-          "uEnableOutline",
-          outlineEnabled ? 1 : 0
-        );
-        renderState.spriteShader.setUniform(
-          "uOutlineColor",
-          [
-            outlineColor[0] / 255,
-            outlineColor[1] / 255,
-            outlineColor[2] / 255,
-          ]
-        );
-        renderState.spriteShader.setUniform(
-          "uOutlineThickness",
-          outlineThickness
-        );
+        const setOutlineUniforms = (enableOutline, outlineOnly) => {
+          renderState.spriteShader.setUniform("uTexture", draw.tex);
+          renderState.spriteShader.setUniform(
+            "uAlphaCutoff",
+            draw.sprite.alphaCutoff ?? 0.4
+          );
+          renderState.spriteShader.setUniform(
+            "uTextureSize",
+            [texWidth, texHeight]
+          );
+          renderState.spriteShader.setUniform(
+            "uEnableOutline",
+            enableOutline ? 1 : 0
+          );
+          renderState.spriteShader.setUniform(
+            "uOutlineOnly",
+            outlineOnly ? 1 : 0
+          );
+          renderState.spriteShader.setUniform(
+            "uOutlineColor",
+            [
+              outlineColor[0] / 255,
+              outlineColor[1] / 255,
+              outlineColor[2] / 255,
+            ]
+          );
+          renderState.spriteShader.setUniform(
+            "uOutlineThickness",
+            outlineThickness
+          );
+        };
+
+        if (outlineEnabled && draw.isPainting) {
+          const expandX = (outlineThickness / texWidth) * draw.sprite.width;
+          const expandY = (outlineThickness / texHeight) * draw.sprite.height;
+          const outlineWidth =
+            (draw.sprite.width + expandX * 2) * Game.config.gridSize;
+          const outlineHeight =
+            (draw.sprite.height + expandY * 2) * Game.config.gridSize;
+          setOutlineUniforms(true, true);
+          plane(outlineWidth, outlineHeight);
+        }
+
+        setOutlineUniforms(outlineEnabled && !draw.isPainting, false);
       } else {
         texture(draw.tex);
       }
