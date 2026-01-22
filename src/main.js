@@ -14,6 +14,7 @@ function setup() {
     occluderShader: Game.rendering.createOccluderShader(),
     uiFont: null,
   };
+  Game.ui?.ensureOverlay?.();
 
   loadLevel();
 }
@@ -24,16 +25,19 @@ function draw() {
   background(180, 210, 240);
 
   if (loading || !world) {
+    Game.ui?.renderDialogueOverlay?.(null);
     drawLoading();
     return;
   }
 
   updateSystems(world, dt);
   Game.systems.renderSystem(world, renderState);
+  Game.ui?.renderDialogueOverlay?.(world);
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
+  Game.ui?.resizeOverlay?.();
 }
 
 async function loadLevel() {
