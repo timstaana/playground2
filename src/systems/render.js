@@ -54,6 +54,7 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
       const vel = worldRef.components.Velocity.get(entity);
       const horizontalSpeed = vel ? Math.hypot(vel.x, vel.z) : 0;
       const isMoving = horizontalSpeed > 0.01;
+      const shouldAnimate = sprite.animate ? true : isMoving;
       const toCam = {
         x: cameraPos.x - transform.pos.x,
         z: cameraPos.z - transform.pos.z,
@@ -77,14 +78,18 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
         z: transform.pos.z,
       };
       const worldPos = Game.utils.gameToWorld(center);
-      const toCamWorld = {
-        x: cameraWorld.x - worldPos.x,
-        y: cameraWorld.y - worldPos.y,
-        z: cameraWorld.z - worldPos.z,
-      };
-      const horiz = Math.hypot(toCamWorld.x, toCamWorld.z);
-      const billboardYaw = Math.atan2(toCamWorld.x, toCamWorld.z);
-      const billboardPitch = Math.atan2(toCamWorld.y, horiz || 1);
+      let billboardYaw = transform.rotY;
+      let billboardPitch = sprite.pitch ?? 0;
+      if (sprite.billboard !== false) {
+        const toCamWorld = {
+          x: cameraWorld.x - worldPos.x,
+          y: cameraWorld.y - worldPos.y,
+          z: cameraWorld.z - worldPos.z,
+        };
+        const horiz = Math.hypot(toCamWorld.x, toCamWorld.z);
+        billboardYaw = Math.atan2(toCamWorld.x, toCamWorld.z);
+        billboardPitch = Math.atan2(toCamWorld.y, horiz || 1);
+      }
       const depth =
         (center.x - cameraPos.x) * viewDir.x +
         (center.y - cameraPos.y) * viewDir.y +
@@ -98,7 +103,7 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
           worldPos,
           billboardYaw,
           billboardPitch,
-          isMoving,
+          isMoving: shouldAnimate,
           depth,
         });
         continue;
@@ -217,5 +222,165 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
       Game.rendering.clearTexture();
     }
     blendMode(BLEND);
+  }
+
+  if (Game.debug?.enabled) {
+    Game.systems.drawDebugOverlay(worldRef, cameraWorld, renderState);
+  } else {
+    Game.systems.drawCharacterLabels(worldRef, cameraWorld, renderState);
+  }
+};
+
+Game.systems.drawCharacterLabels = function drawCharacterLabels(
+  worldRef,
+  cameraWorld,
+  renderState
+) {
+  if (!worldRef || !renderState?.uiFont) {
+    return;
+  }
+
+  resetShader();
+  blendMode(BLEND);
+  noLights();
+  Game.rendering.clearTexture();
+
+  textFont(renderState.uiFont);
+  textSize(12);
+  textAlign(CENTER, BOTTOM);
+
+  for (const [entity, labelData] of worldRef.components.Label.entries()) {
+    if (!labelData || labelData.showInGame === false) {
+      continue;
+    }
+
+    const isPlayer = worldRef.components.Player.has(entity);
+    const isNPC = worldRef.components.NPC.has(entity);
+    if (!isPlayer && !isNPC) {
+      continue;
+    }
+
+    const transform = worldRef.components.Transform.get(entity);
+    const collider = worldRef.components.Collider.get(entity);
+    if (!transform || !collider) {
+      continue;
+    }
+
+    let color = isNPC ? [120, 200, 255] : [255, 220, 80];
+    if (Array.isArray(labelData.color) && labelData.color.length >= 3) {
+      color = labelData.color;
+    }
+
+    const labelText = labelData.text ?? `entity:${entity}`;
+    const labelOffset = labelData.offsetY ?? 0.1;
+    const labelPos = {
+      x: transform.pos.x,
+      y: transform.pos.y + collider.h + labelOffset,
+      z: transform.pos.z,
+    };
+    const labelWorld = Game.utils.gameToWorld(labelPos);
+    const toCam = {
+      x: cameraWorld.x - labelWorld.x,
+      z: cameraWorld.z - labelWorld.z,
+    };
+    const yaw = Math.atan2(toCam.x, toCam.z);
+
+    push();
+    translate(labelWorld.x, labelWorld.y, labelWorld.z);
+    rotateY(yaw);
+    noStroke();
+    fill(color[0], color[1], color[2]);
+    text(labelText, 0, 0);
+    pop();
+  }
+};
+
+Game.systems.drawDebugOverlay = function drawDebugOverlay(
+  worldRef,
+  cameraWorld,
+  renderState
+) {
+  if (!worldRef) {
+    return;
+  }
+
+  resetShader();
+  blendMode(BLEND);
+  noLights();
+  Game.rendering.clearTexture();
+
+  if (renderState?.uiFont) {
+    textFont(renderState.uiFont);
+  }
+  textSize(12);
+  textAlign(CENTER, BOTTOM);
+
+  for (const [entity, collider] of worldRef.components.Collider.entries()) {
+    const transform = worldRef.components.Transform.get(entity);
+    if (!transform) {
+      continue;
+    }
+
+    const labelData = worldRef.components.Label.get(entity);
+    if (!labelData) {
+      continue;
+    }
+
+    const isPlayer = worldRef.components.Player.has(entity);
+    const isNPC = worldRef.components.NPC.has(entity);
+    const isPainting = worldRef.components.Painting.has(entity);
+
+    let color = [255, 220, 80];
+    if (isNPC) {
+      color = [120, 200, 255];
+    } else if (isPainting) {
+      color = [255, 120, 200];
+    }
+    if (Array.isArray(labelData.color) && labelData.color.length >= 3) {
+      color = labelData.color;
+    }
+
+    const label = labelData.text ?? `entity:${entity}`;
+
+    const pos = transform.pos;
+    const posText = `${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(
+      2
+    )}`;
+
+    const center = { x: pos.x, y: pos.y + collider.h / 2, z: pos.z };
+    const worldPos = Game.utils.gameToWorld(center);
+
+    push();
+    translate(worldPos.x, worldPos.y, worldPos.z);
+    stroke(color[0], color[1], color[2]);
+    strokeWeight(2);
+    noFill();
+    box(
+      collider.w * Game.config.gridSize,
+      collider.h * Game.config.gridSize,
+      collider.d * Game.config.gridSize
+    );
+    pop();
+
+    const labelOffset = labelData.offsetY ?? 0.1;
+    const labelPos = {
+      x: pos.x,
+      y: pos.y + collider.h + labelOffset,
+      z: pos.z,
+    };
+    const labelWorld = Game.utils.gameToWorld(labelPos);
+    const toCam = {
+      x: cameraWorld.x - labelWorld.x,
+      z: cameraWorld.z - labelWorld.z,
+    };
+    const yaw = Math.atan2(toCam.x, toCam.z);
+
+    push();
+    translate(labelWorld.x, labelWorld.y, labelWorld.z);
+    rotateY(yaw);
+    noStroke();
+    fill(color[0], color[1], color[2]);
+    text(`${label} (${posText})`, 0, 0);
+    pop();
   }
 };

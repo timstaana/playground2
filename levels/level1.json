@@ -14,7 +14,7 @@
     "occluderAmbient": 0.588
   },
   "player": {
-    "size": { "w": 1, "d": 1, "h": 1.5 },
+    "size": { "w": 0.8, "d": 0.8, "h": 1.5 },
     "jumpHeight": 1.5,
     "speed": 4.5,
     "turnSpeed": 2.6,
@@ -31,7 +31,8 @@
   },
   "npcs": [
     {
-      "id": "guide",
+      "id": "test",
+      "label": "NPC Test",
       "spawn": { "x": 4.5, "y": 1, "z": 1.5 },
       "yaw": 3.14
     }
@@ -42,6 +43,27 @@
     "lookHeight": 1.5,
     "smooth": 0.18
   },
+  "paintings": [
+    {
+      "id": "art-00",
+      "image": "assets/art/art_00.jpg",
+      "pos": { "x": -0.5, "y": 5, "z": 0.55 },
+      "yaw": 0,
+      "width": 4,
+      "height": 4,
+      "billboard": false
+    },
+    {
+      "id": "art-01",
+      "image": "assets/art/art_01.gif",
+      "pos": { "x": 4, "y": 2, "z": 4.45 },
+      "yaw": 3.14,
+      "width": 1,
+      "height": 1,
+      "billboard": false,
+      "animate": true
+    }
+  ],
   "blocks": [
     { "x": 0, "y": 0, "z": 0 },
     { "x": 1, "y": 0, "z": 0 },

@@ -15,6 +15,8 @@ Game.ecs.createWorld = function createWorld() {
       BillboardSprite: new Map(),
       Player: new Map(),
       NPC: new Map(),
+      Painting: new Map(),
+      Label: new Map(),
       Speed: new Map(),
       TurnSpeed: new Map(),
       Jump: new Map(),

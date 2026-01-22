@@ -12,6 +12,7 @@ function setup() {
   renderState = {
     spriteShader: Game.rendering.createSpriteShader(),
     occluderShader: Game.rendering.createOccluderShader(),
+    uiFont: null,
   };
 
   loadLevel();
@@ -50,11 +51,25 @@ async function loadLevel() {
 
   assetStatus = await Game.assets.loadAssets(levelData || {});
   uiFont = assetStatus.uiFont || null;
+  if (renderState) {
+    renderState.uiFont = uiFont;
+  }
   world = Game.ecs.createWorld();
   world.resources.textures.playerFront = assetStatus.front;
   world.resources.textures.playerBack = assetStatus.back;
+  if (assetStatus.paintings) {
+    for (const [key, texture] of Object.entries(assetStatus.paintings)) {
+      world.resources.textures[key] = texture;
+    }
+  }
   Game.level.buildLevel(world, levelData || {});
   loading = false;
+}
+
+function keyPressed() {
+  if (key === "`" || keyCode === 192) {
+    Game.debug.enabled = !Game.debug.enabled;
+  }
 }
 
 function updateSystems(worldRef, dt) {

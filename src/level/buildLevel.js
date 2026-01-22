@@ -94,6 +94,11 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     velocity: Math.sqrt(2 * gravityValue * jumpHeight),
   });
   Game.ecs.addComponent(worldRef, "Player", player, {});
+  Game.ecs.addComponent(worldRef, "Label", player, {
+    text: playerDef.label ?? "player",
+    color: playerDef.labelColor || null,
+    offsetY: playerDef.labelOffsetY ?? 0.1,
+  });
   worldRef.resources.playerId = player;
 
   const npcDefs = level.npcs || [];
@@ -133,6 +138,100 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     });
     Game.ecs.addComponent(worldRef, "NPC", npc, {
       id: npcDef.id || `npc-${i + 1}`,
+    });
+    Game.ecs.addComponent(worldRef, "Label", npc, {
+      text:
+        npcDef.label ??
+        npcDef.name ??
+        npcDef.id ??
+        `npc-${i + 1}`,
+      color: npcDef.labelColor || null,
+      offsetY: npcDef.labelOffsetY ?? 0.1,
+    });
+  }
+
+  const paintingDefs = level.paintings || [];
+  for (let i = 0; i < paintingDefs.length; i += 1) {
+    const paintingDef = paintingDefs[i] || {};
+    const painting = Game.ecs.createEntity(worldRef);
+    const anchorPos = paintingDef.pos || paintingDef.spawn || {
+      x: 1.5,
+      y: 1,
+      z: 1.5,
+    };
+    const size = paintingDef.size || {};
+    const width = paintingDef.width ?? size.w ?? 1;
+    const height = paintingDef.height ?? size.h ?? 1;
+    const depth = paintingDef.depth ?? size.d ?? 1;
+    const textureKey =
+      paintingDef.textureKey || paintingDef.key || paintingDef.id || `painting-${i + 1}`;
+    const frontKey = paintingDef.frontKey || textureKey;
+    const backKey = paintingDef.backKey || textureKey;
+    const texRef =
+      worldRef.resources.textures[frontKey] ||
+      worldRef.resources.textures[backKey];
+    const texSource = texRef?.source || texRef?.texture;
+    const aspect =
+      texSource && texSource.width && texSource.height
+        ? texSource.width / texSource.height
+        : null;
+    let fittedWidth = width;
+    let fittedHeight = height;
+    if (aspect && width > 0 && height > 0) {
+      const boundRatio = width / height;
+      if (aspect >= boundRatio) {
+        fittedWidth = width;
+        fittedHeight = width / aspect;
+      } else {
+        fittedHeight = height;
+        fittedWidth = height * aspect;
+      }
+    } else if (aspect && width > 0) {
+      fittedWidth = width;
+      fittedHeight = width / aspect;
+    } else if (aspect && height > 0) {
+      fittedHeight = height;
+      fittedWidth = height * aspect;
+    }
+
+    const bottomCenter = {
+      x: anchorPos.x + width / 2,
+      y: anchorPos.y - height,
+      z: anchorPos.z,
+    };
+
+    Game.ecs.addComponent(worldRef, "Transform", painting, {
+      pos: { x: bottomCenter.x, y: bottomCenter.y, z: bottomCenter.z },
+      rotY: paintingDef.yaw ?? 0,
+    });
+    Game.ecs.addComponent(worldRef, "Collider", painting, {
+      w: width,
+      d: depth,
+      h: height,
+    });
+    Game.ecs.addComponent(worldRef, "Renderable", painting, {
+      color: paintingDef.color || [255, 255, 255],
+      kind: "painting",
+    });
+    Game.ecs.addComponent(worldRef, "BillboardSprite", painting, {
+      front: frontKey,
+      back: backKey,
+      width: fittedWidth,
+      height: fittedHeight,
+      offsetY: paintingDef.offsetY ?? height / 2,
+      fps: paintingDef.fps ?? 12,
+      idleFrame: paintingDef.idleFrame ?? 0,
+      alphaCutoff: paintingDef.alphaCutoff ?? 0.02,
+      billboard: paintingDef.billboard ?? false,
+      animate: paintingDef.animate ?? true,
+    });
+    Game.ecs.addComponent(worldRef, "Painting", painting, {
+      id: paintingDef.id || textureKey,
+    });
+    Game.ecs.addComponent(worldRef, "Label", painting, {
+      text: paintingDef.label ?? paintingDef.id ?? textureKey,
+      color: paintingDef.labelColor || null,
+      offsetY: paintingDef.labelOffsetY ?? 0.1,
     });
   }
 

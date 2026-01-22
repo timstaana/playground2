@@ -37,7 +37,9 @@ Game.assets.loadAssets = async function loadAssets(level) {
   const frontPath = playerSprite.front || "assets/player_front.gif";
   const backPath = playerSprite.back || "assets/player_back.gif";
   const uiFontPath = level.uiFont || "assets/opensans.ttf";
+  const paintingDefs = level.paintings || [];
   const missing = [];
+  const paintings = {};
 
   let front = null;
   let back = null;
@@ -78,5 +80,26 @@ Game.assets.loadAssets = async function loadAssets(level) {
     font = null;
   }
 
-  return { front, back, missing, uiFont: font };
+  for (let i = 0; i < paintingDefs.length; i += 1) {
+    const def = paintingDefs[i] || {};
+    const imagePath = def.image || def.src;
+    if (!imagePath) {
+      continue;
+    }
+    const key =
+      def.textureKey || def.key || def.id || `painting-${i + 1}`;
+
+    try {
+      const paintingTex = await Game.assets.loadSpriteTexture(imagePath);
+      if (!Game.rendering.isValidTexture(paintingTex.texture)) {
+        throw new Error("Invalid texture instance");
+      }
+      paintings[key] = paintingTex;
+    } catch (err) {
+      console.warn(`Missing painting: ${imagePath}`, err);
+      missing.push(imagePath);
+    }
+  }
+
+  return { front, back, paintings, missing, uiFont: font };
 };
