@@ -104,6 +104,10 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
   const npcDefs = level.npcs || [];
   const defaultFrontKey = playerSpriteDef.frontKey || "playerFront";
   const defaultBackKey = playerSpriteDef.backKey || "playerBack";
+  const defaultSpriteWidth = playerSpriteDef.width ?? playerSize.w;
+  const defaultSpriteHeight = playerSpriteDef.height ?? playerSize.h;
+  const defaultSpriteOffsetY =
+    playerSpriteDef.offsetY ?? defaultSpriteHeight / 2;
 
   for (let i = 0; i < npcDefs.length; i += 1) {
     const npcDef = npcDefs[i];
@@ -125,12 +129,17 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
       color: npcDef.color || [70, 110, 200],
       kind: "npc",
     });
+    const spriteWidth = npcSprite.width ?? defaultSpriteWidth;
+    const spriteHeight = npcSprite.height ?? defaultSpriteHeight;
+    const spriteOffsetY =
+      npcSprite.offsetY ?? (npcSprite.height ?? defaultSpriteHeight) / 2;
+
     Game.ecs.addComponent(worldRef, "BillboardSprite", npc, {
       front: npcSprite.frontKey || defaultFrontKey,
       back: npcSprite.backKey || defaultBackKey,
-      width: npcSprite.width ?? npcSize.w,
-      height: npcSprite.height ?? npcSize.h,
-      offsetY: npcSprite.offsetY ?? (npcSprite.height ?? npcSize.h) / 2,
+      width: spriteWidth,
+      height: spriteHeight,
+      offsetY: spriteOffsetY,
       fps: npcSprite.fps ?? playerSpriteDef.fps ?? 12,
       idleFrame: npcSprite.idleFrame ?? playerSpriteDef.idleFrame ?? 0,
       alphaCutoff:
