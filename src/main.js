@@ -6,6 +6,7 @@ let gridSize = 50;
 let assetStatus = null;
 let uiFont = null;
 let spriteShader = null;
+let occluderShader = null;
 
 const SPRITE_VERT = `
 precision mediump float;
@@ -34,6 +35,55 @@ void main() {
 }
 `;
 
+const OCCLUDER_VERT = `
+precision mediump float;
+attribute vec3 aPosition;
+uniform mat4 uModelViewMatrix;
+uniform mat4 uProjectionMatrix;
+void main() {
+  gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aPosition, 1.0);
+}
+`;
+
+const OCCLUDER_FRAG = `
+precision mediump float;
+uniform vec3 uColor;
+uniform float uAlpha;
+uniform float uDitherScale;
+uniform float uAmbient;
+float bayer4(vec2 p) {
+  p = mod(p, 4.0);
+  float x = p.x;
+  float y = p.y;
+  float v = 0.0;
+  if (x < 1.0 && y < 1.0) v = 0.0;
+  else if (x < 2.0 && y < 1.0) v = 8.0;
+  else if (x < 3.0 && y < 1.0) v = 2.0;
+  else if (x < 4.0 && y < 1.0) v = 10.0;
+  else if (x < 1.0 && y < 2.0) v = 12.0;
+  else if (x < 2.0 && y < 2.0) v = 4.0;
+  else if (x < 3.0 && y < 2.0) v = 14.0;
+  else if (x < 4.0 && y < 2.0) v = 6.0;
+  else if (x < 1.0 && y < 3.0) v = 3.0;
+  else if (x < 2.0 && y < 3.0) v = 11.0;
+  else if (x < 3.0 && y < 3.0) v = 1.0;
+  else if (x < 4.0 && y < 3.0) v = 9.0;
+  else if (x < 1.0 && y < 4.0) v = 15.0;
+  else if (x < 2.0 && y < 4.0) v = 7.0;
+  else if (x < 3.0 && y < 4.0) v = 13.0;
+  else v = 5.0;
+  return v / 16.0;
+}
+void main() {
+  float threshold = bayer4(floor(gl_FragCoord.xy / max(uDitherScale, 1.0)));
+  if (threshold > uAlpha) {
+    discard;
+  }
+  vec3 litColor = uColor * uAmbient;
+  gl_FragColor = vec4(litColor, 1.0);
+}
+`;
+
 const inputState = {
   jumpHeld: false,
 };
@@ -41,6 +91,7 @@ const inputState = {
 function setup() {
   createCanvas(windowWidth, windowHeight, WEBGL);
   spriteShader = createSpriteShader();
+  occluderShader = createOccluderShader();
   frameRate(60);
 
   loadLevel();
@@ -120,6 +171,17 @@ function createWorld() {
         playerFront: null,
         playerBack: null,
       },
+      rendering: {
+        occluderAlpha: 0.35,
+        occluderDitherScale: 1,
+        occluderConeRadius: 1.4,
+        occluderConeHeight: 0.9,
+        occluderConeSamples: 12,
+        occluderConeRings: 3,
+        occluderConeHeights: 3,
+        occluderFadeDistance: 3.5,
+        occluderAmbient: 150 / 255,
+      },
     },
   };
 }
@@ -150,11 +212,38 @@ function buildLevel(worldRef, level) {
   const gravityValue = level.gravity ?? 18;
   const playerDef = level.player || {};
   const playerSpriteDef = playerDef.sprite || {};
+  const renderingDef = level.rendering || {};
   const playerSize = playerDef.size || { w: 1, d: 1, h: 1.5 };
   const playerSpeed = playerDef.speed ?? 4;
   const playerTurnSpeed = playerDef.turnSpeed ?? 2.6;
   const jumpHeight = playerDef.jumpHeight ?? 1.5;
   const spawn = playerDef.spawn || { x: 2.5, y: 1, z: 2.5 };
+
+  worldRef.resources.rendering.occluderAlpha =
+    renderingDef.occluderAlpha ?? worldRef.resources.rendering.occluderAlpha;
+  worldRef.resources.rendering.occluderDitherScale =
+    renderingDef.occluderDitherScale ??
+    worldRef.resources.rendering.occluderDitherScale;
+  worldRef.resources.rendering.occluderConeRadius =
+    renderingDef.occluderConeRadius ??
+    worldRef.resources.rendering.occluderConeRadius;
+  worldRef.resources.rendering.occluderConeHeight =
+    renderingDef.occluderConeHeight ??
+    worldRef.resources.rendering.occluderConeHeight;
+  worldRef.resources.rendering.occluderConeSamples =
+    renderingDef.occluderConeSamples ??
+    worldRef.resources.rendering.occluderConeSamples;
+  worldRef.resources.rendering.occluderConeRings =
+    renderingDef.occluderConeRings ??
+    worldRef.resources.rendering.occluderConeRings;
+  worldRef.resources.rendering.occluderConeHeights =
+    renderingDef.occluderConeHeights ??
+    worldRef.resources.rendering.occluderConeHeights;
+  worldRef.resources.rendering.occluderFadeDistance =
+    renderingDef.occluderFadeDistance ??
+    worldRef.resources.rendering.occluderFadeDistance;
+  worldRef.resources.rendering.occluderAmbient =
+    renderingDef.occluderAmbient ?? worldRef.resources.rendering.occluderAmbient;
 
   const blocks = level.blocks || [];
   for (const block of blocks) {
@@ -635,6 +724,8 @@ function renderSystem(worldRef) {
       };
     }
   }
+  const occluderMap = computeOccluders(worldRef, cameraPos);
+  const occluderBlocks = [];
   const spriteDraws = [];
 
   for (const [entity, renderable] of worldRef.components.Renderable.entries()) {
@@ -707,11 +798,61 @@ function renderSystem(worldRef) {
     };
     const worldPos = gameToWorld(center);
 
+    if (worldRef.components.StaticBlock.has(entity)) {
+      const cellX = Math.floor(transform.pos.x);
+      const cellY = Math.floor(transform.pos.y);
+      const cellZ = Math.floor(transform.pos.z);
+      const occluderAlpha = occluderMap.get(blockKey(cellX, cellY, cellZ));
+      if (occluderAlpha !== undefined) {
+        occluderBlocks.push({
+          worldPos,
+          collider,
+          color: renderable.color,
+          alpha: occluderAlpha,
+        });
+        continue;
+      }
+    }
+
     push();
     translate(worldPos.x, worldPos.y, worldPos.z);
     fill(renderable.color[0], renderable.color[1], renderable.color[2]);
     box(collider.w * gridSize, collider.h * gridSize, collider.d * gridSize);
     pop();
+  }
+
+  if (occluderBlocks.length > 0 && occluderShader) {
+    shader(occluderShader);
+    blendMode(REPLACE);
+    occluderShader.setUniform(
+      "uDitherScale",
+      worldRef.resources.rendering.occluderDitherScale ?? 1
+    );
+    occluderShader.setUniform(
+      "uAmbient",
+      worldRef.resources.rendering.occluderAmbient ?? 150 / 255
+    );
+    for (const block of occluderBlocks) {
+      const color = block.color || [100, 130, 100];
+      occluderShader.setUniform(
+        "uColor",
+        [color[0] / 255, color[1] / 255, color[2] / 255]
+      );
+      occluderShader.setUniform(
+        "uAlpha",
+        block.alpha ?? worldRef.resources.rendering.occluderAlpha ?? 0.35
+      );
+      push();
+      translate(block.worldPos.x, block.worldPos.y, block.worldPos.z);
+      box(
+        block.collider.w * gridSize,
+        block.collider.h * gridSize,
+        block.collider.d * gridSize
+      );
+      pop();
+    }
+    resetShader();
+    blendMode(BLEND);
   }
 
   if (spriteDraws.length > 0) {
@@ -793,6 +934,181 @@ function blockKey(x, y, z) {
 
 function isBlockAt(worldRef, x, y, z) {
   return worldRef.resources.blockSet.has(blockKey(x, y, z));
+}
+
+function computeOccluders(worldRef, cameraPos) {
+  const occluders = new Map();
+  const playerId = worldRef.resources.playerId;
+  if (!playerId) {
+    return occluders;
+  }
+
+  const transform = worldRef.components.Transform.get(playerId);
+  const collider = worldRef.components.Collider.get(playerId);
+  const sprite = worldRef.components.BillboardSprite.get(playerId);
+  if (!transform || !collider) {
+    return occluders;
+  }
+
+  const rendering = worldRef.resources.rendering;
+  const radius = rendering.occluderConeRadius ?? 1.4;
+  const height = rendering.occluderConeHeight ?? 0.9;
+  const samples = rendering.occluderConeSamples ?? 12;
+  const rings = Math.max(1, rendering.occluderConeRings ?? 3);
+  const heightSteps = Math.max(1, rendering.occluderConeHeights ?? 3);
+  const heightFractions = buildSymmetricFractions(heightSteps, 0.35);
+
+  const baseY = transform.pos.y + (sprite?.offsetY ?? collider.h / 2);
+  const center = { x: transform.pos.x, y: baseY, z: transform.pos.z };
+
+  traceRayOccluders(worldRef, cameraPos, center, 1, occluders);
+
+  for (let ring = 1; ring <= rings; ring += 1) {
+    const rFrac = ring / rings;
+    for (let i = 0; i < samples; i += 1) {
+      const angle = (i / samples) * TWO_PI;
+      const dx = Math.cos(angle) * radius * rFrac;
+      const dz = Math.sin(angle) * radius * rFrac;
+      for (const hFrac of heightFractions) {
+        const dy = height * hFrac;
+        const norm = Math.sqrt(rFrac * rFrac + hFrac * hFrac);
+        const weight = Math.max(0, 1 - norm);
+        if (weight <= 0) {
+          continue;
+        }
+        traceRayOccluders(
+          worldRef,
+          cameraPos,
+          { x: center.x + dx, y: center.y + dy, z: center.z + dz },
+          weight,
+          occluders
+        );
+      }
+    }
+  }
+
+  return occluders;
+}
+
+function traceRayOccluders(worldRef, start, end, weight, outMap) {
+  const dir = {
+    x: end.x - start.x,
+    y: end.y - start.y,
+    z: end.z - start.z,
+  };
+  const len = Math.hypot(dir.x, dir.y, dir.z);
+  if (len < 1e-6) {
+    return;
+  }
+
+  dir.x /= len;
+  dir.y /= len;
+  dir.z /= len;
+
+  let x = Math.floor(start.x);
+  let y = Math.floor(start.y);
+  let z = Math.floor(start.z);
+  const endX = Math.floor(end.x);
+  const endY = Math.floor(end.y);
+  const endZ = Math.floor(end.z);
+
+  const stepX = dir.x > 0 ? 1 : dir.x < 0 ? -1 : 0;
+  const stepY = dir.y > 0 ? 1 : dir.y < 0 ? -1 : 0;
+  const stepZ = dir.z > 0 ? 1 : dir.z < 0 ? -1 : 0;
+
+  const tDeltaX = stepX !== 0 ? Math.abs(1 / dir.x) : Infinity;
+  const tDeltaY = stepY !== 0 ? Math.abs(1 / dir.y) : Infinity;
+  const tDeltaZ = stepZ !== 0 ? Math.abs(1 / dir.z) : Infinity;
+
+  let tMaxX = Infinity;
+  let tMaxY = Infinity;
+  let tMaxZ = Infinity;
+
+  if (stepX > 0) {
+    tMaxX = (x + 1 - start.x) / dir.x;
+  } else if (stepX < 0) {
+    tMaxX = (start.x - x) / -dir.x;
+  }
+
+  if (stepY > 0) {
+    tMaxY = (y + 1 - start.y) / dir.y;
+  } else if (stepY < 0) {
+    tMaxY = (start.y - y) / -dir.y;
+  }
+
+  if (stepZ > 0) {
+    tMaxZ = (z + 1 - start.z) / dir.z;
+  } else if (stepZ < 0) {
+    tMaxZ = (start.z - z) / -dir.z;
+  }
+
+  let steps = 0;
+  const maxSteps = Math.ceil(len * 3) + 3;
+
+  const baseAlpha = worldRef.resources.rendering.occluderAlpha ?? 0.35;
+  const fadeDistance =
+    worldRef.resources.rendering.occluderFadeDistance ?? 0;
+
+  while (steps < maxSteps) {
+    if (x === endX && y === endY && z === endZ) {
+      break;
+    }
+
+    if (tMaxX < tMaxY) {
+      if (tMaxX < tMaxZ) {
+        x += stepX;
+        tMaxX += tDeltaX;
+      } else {
+        z += stepZ;
+        tMaxZ += tDeltaZ;
+      }
+    } else if (tMaxY < tMaxZ) {
+      y += stepY;
+      tMaxY += tDeltaY;
+    } else {
+      z += stepZ;
+      tMaxZ += tDeltaZ;
+    }
+
+    if (x === endX && y === endY && z === endZ) {
+      break;
+    }
+
+    if (isBlockAt(worldRef, x, y, z)) {
+      let combinedWeight = weight;
+      if (fadeDistance > 0) {
+        const cx = x + 0.5;
+        const cy = y + 0.5;
+        const cz = z + 0.5;
+        const distToTarget = Math.hypot(cx - end.x, cy - end.y, cz - end.z);
+        const fade = Math.max(0, 1 - distToTarget / fadeDistance);
+        combinedWeight *= fade;
+      }
+
+      if (combinedWeight > 0) {
+        const alpha = 1 - (1 - baseAlpha) * combinedWeight;
+        const key = blockKey(x, y, z);
+        const existing = outMap.get(key);
+        if (existing === undefined || alpha < existing) {
+          outMap.set(key, alpha);
+        }
+      }
+    }
+
+    steps += 1;
+  }
+}
+
+function buildSymmetricFractions(count, maxAbs) {
+  if (count <= 1) {
+    return [0];
+  }
+  const fractions = [];
+  for (let i = 0; i < count; i += 1) {
+    const t = i / (count - 1);
+    fractions.push((t * 2 - 1) * maxAbs);
+  }
+  return fractions;
 }
 
 function clearTexture() {
@@ -940,6 +1256,13 @@ function createSpriteShader() {
     return null;
   }
   return createShader(SPRITE_VERT, SPRITE_FRAG);
+}
+
+function createOccluderShader() {
+  if (typeof createShader !== "function") {
+    return null;
+  }
+  return createShader(OCCLUDER_VERT, OCCLUDER_FRAG);
 }
 
 async function loadSpriteTexture(path) {

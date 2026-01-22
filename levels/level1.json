@@ -2,6 +2,17 @@
   "gridSize": 50,
   "gravity": 18,
   "uiFont": "assets/opensans.ttf",
+  "rendering": {
+    "occluderAlpha": 0.35,
+    "occluderDitherScale": 1,
+    "occluderConeRadius": 1.4,
+    "occluderConeHeight": 0.9,
+    "occluderConeSamples": 12,
+    "occluderConeRings": 3,
+    "occluderConeHeights": 3,
+    "occluderFadeDistance": 3.5,
+    "occluderAmbient": 0.588
+  },
   "player": {
     "size": { "w": 1, "d": 1, "h": 1.5 },
     "jumpHeight": 1.5,
@@ -27,8 +38,8 @@
   ],
   "camera": {
     "distance": 4.5,
-    "height": 2.4,
-    "lookHeight": 0.8,
+    "height": 1.75,
+    "lookHeight": 1.5,
     "smooth": 0.18
   },
   "blocks": [
