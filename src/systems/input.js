@@ -30,8 +30,8 @@ Game.systems.inputState = {
 
 Game.systems.inputSystem = function inputSystem(worldRef) {
   const state = Game.systems.inputState;
-  const turnKeys = (keyIsDown("d") ? 1 : 0) - (keyIsDown("a") ? 1 : 0);
-  const throttleKeys = (keyIsDown("w") ? 1 : 0) - (keyIsDown("s") ? 1 : 0);
+  const turnKeys = ((keyIsDown(RIGHT_ARROW) || keyIsDown("d")) ? 1 : 0) - (keyIsDown(LEFT_ARROW) || (keyIsDown("a")) ? 1 : 0);
+  const throttleKeys = ((keyIsDown(UP_ARROW) || keyIsDown("w")) ? 1 : 0) - ((keyIsDown(DOWN_ARROW) || keyIsDown("s")) ? 1 : 0);
   const jumpDown = keyIsDown("Space");
   const touchJump = !!state.touchJumpQueued;
   const spacePressed = (jumpDown && !state.jumpHeld) || touchJump;
