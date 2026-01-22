@@ -1,4 +1,4 @@
 window.Game = window.Game || {};
 Game.config = {
-  gridSize: 50,
+  gridSize: 40,
 };
