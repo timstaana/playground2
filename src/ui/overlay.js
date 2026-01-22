@@ -78,99 +78,152 @@ Game.ui.renderDialogueOverlay = function renderDialogueOverlay(worldRef) {
   const height = overlay.canvas.height;
   ctx.clearRect(0, 0, width, height);
 
-  if (!worldRef) {
-    return;
-  }
+  if (worldRef) {
+    const cameraId = worldRef.resources.cameraId;
+    const dialogueState = cameraId
+      ? worldRef.components.DialogueState.get(cameraId)
+      : null;
+    if (dialogueState && dialogueState.mode === "dialogue") {
+      const dialogue = worldRef.components.Dialogue.get(dialogueState.targetId);
+      const lines = Array.isArray(dialogue?.lines) ? dialogue.lines : [];
+      const message = lines.length > 0 ? lines.join("\n") : "";
+      if (message) {
+        const margin = 24;
+        const padding = 16;
+        const boxWidth = Math.min(width - margin * 2, 520);
+        const boxHeight = Math.min(height * 0.28, 170);
+        const x = margin;
+        const y = height - margin - boxHeight;
 
-  const cameraId = worldRef.resources.cameraId;
-  const dialogueState = cameraId
-    ? worldRef.components.DialogueState.get(cameraId)
-    : null;
-  if (!dialogueState || dialogueState.mode !== "dialogue") {
-    return;
-  }
+        ctx.save();
+        ctx.fillStyle = "rgba(15, 18, 24, 0.92)";
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+        ctx.lineWidth = 1;
 
-  const dialogue = worldRef.components.Dialogue.get(dialogueState.targetId);
-  if (!dialogue) {
-    return;
-  }
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(x, y, boxWidth, boxHeight, 8);
+        } else {
+          const radius = 8;
+          ctx.moveTo(x + radius, y);
+          ctx.lineTo(x + boxWidth - radius, y);
+          ctx.quadraticCurveTo(x + boxWidth, y, x + boxWidth, y + radius);
+          ctx.lineTo(x + boxWidth, y + boxHeight - radius);
+          ctx.quadraticCurveTo(
+            x + boxWidth,
+            y + boxHeight,
+            x + boxWidth - radius,
+            y + boxHeight
+          );
+          ctx.lineTo(x + radius, y + boxHeight);
+          ctx.quadraticCurveTo(x, y + boxHeight, x, y + boxHeight - radius);
+          ctx.lineTo(x, y + radius);
+          ctx.quadraticCurveTo(x, y, x + radius, y);
+        }
+        ctx.fill();
+        ctx.stroke();
 
-  const lines = Array.isArray(dialogue.lines) ? dialogue.lines : [];
-  const message = lines.length > 0 ? lines.join("\n") : "";
-  if (!message) {
-    return;
-  }
+        const fontFamily = Game.ui.fontFamily;
+        let textX = x + padding;
+        let textY = y + padding;
 
-  const margin = 24;
-  const padding = 16;
-  const boxWidth = Math.min(width - margin * 2, 520);
-  const boxHeight = Math.min(height * 0.28, 170);
-  const x = margin;
-  const y = height - margin - boxHeight;
+        ctx.textBaseline = "top";
+        if (dialogue?.name) {
+          ctx.font = `600 13px ${fontFamily}`;
+          ctx.fillStyle = "rgba(220, 220, 220, 0.9)";
+          ctx.fillText(dialogue.name, textX, textY);
+          textY += 18;
+        }
 
-  ctx.save();
-  ctx.fillStyle = "rgba(15, 18, 24, 0.92)";
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
-  ctx.lineWidth = 1;
+        const textColor =
+          Array.isArray(dialogue?.color) && dialogue.color.length >= 3
+            ? dialogue.color
+            : [255, 255, 255];
+        ctx.fillStyle = `rgb(${textColor[0]}, ${textColor[1]}, ${textColor[2]})`;
+        ctx.font = `16px ${fontFamily}`;
 
-  ctx.beginPath();
-  if (typeof ctx.roundRect === "function") {
-    ctx.roundRect(x, y, boxWidth, boxHeight, 8);
-  } else {
-    const radius = 8;
-    ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + boxWidth - radius, y);
-    ctx.quadraticCurveTo(x + boxWidth, y, x + boxWidth, y + radius);
-    ctx.lineTo(x + boxWidth, y + boxHeight - radius);
-    ctx.quadraticCurveTo(
-      x + boxWidth,
-      y + boxHeight,
-      x + boxWidth - radius,
-      y + boxHeight
-    );
-    ctx.lineTo(x + radius, y + boxHeight);
-    ctx.quadraticCurveTo(x, y + boxHeight, x, y + boxHeight - radius);
-    ctx.lineTo(x, y + radius);
-    ctx.quadraticCurveTo(x, y, x + radius, y);
-  }
-  ctx.fill();
-  ctx.stroke();
+        const availableWidth = boxWidth - padding * 2;
+        const paragraphs = message.split("\n");
+        const renderedLines = [];
+        for (const paragraph of paragraphs) {
+          const wrapped = Game.ui.wrapText(ctx, paragraph, availableWidth);
+          for (const line of wrapped) {
+            renderedLines.push(line);
+          }
+        }
 
-  const fontFamily = Game.ui.fontFamily;
-  let textX = x + padding;
-  let textY = y + padding;
+        const lineHeight = 20;
+        const maxLines = Math.floor((boxHeight - padding * 2) / lineHeight);
+        for (let i = 0; i < renderedLines.length && i < maxLines; i += 1) {
+          ctx.fillText(renderedLines[i], textX, textY);
+          textY += lineHeight;
+        }
 
-  ctx.textBaseline = "top";
-  if (dialogue.name) {
-    ctx.font = `600 13px ${fontFamily}`;
-    ctx.fillStyle = "rgba(220, 220, 220, 0.9)";
-    ctx.fillText(dialogue.name, textX, textY);
-    textY += 18;
-  }
-
-  const textColor =
-    Array.isArray(dialogue.color) && dialogue.color.length >= 3
-      ? dialogue.color
-      : [255, 255, 255];
-  ctx.fillStyle = `rgb(${textColor[0]}, ${textColor[1]}, ${textColor[2]})`;
-  ctx.font = `16px ${fontFamily}`;
-
-  const availableWidth = boxWidth - padding * 2;
-  const paragraphs = message.split("\n");
-  const renderedLines = [];
-  for (const paragraph of paragraphs) {
-    const wrapped = Game.ui.wrapText(ctx, paragraph, availableWidth);
-    for (const line of wrapped) {
-      renderedLines.push(line);
+        ctx.restore();
+      }
     }
   }
 
-  const lineHeight = 20;
-  const maxLines = Math.floor((boxHeight - padding * 2) / lineHeight);
-  for (let i = 0; i < renderedLines.length && i < maxLines; i += 1) {
-    ctx.fillText(renderedLines[i], textX, textY);
-    textY += lineHeight;
+  Game.ui.renderTouchControls?.();
+};
+
+Game.ui.renderTouchControls = function renderTouchControls() {
+  const overlay = Game.ui.overlay;
+  if (!overlay || !overlay.ctx) {
+    return;
+  }
+  const touch = Game.systems?.inputState?.touch;
+  const pending = touch?.pending;
+  const hasPending = pending && pending.size > 0;
+  const jumpPos = touch?.jumpPos;
+  if (!touch || (!touch.active && !hasPending)) {
+    if (!jumpPos) {
+      return;
+    }
   }
 
-  ctx.restore();
+  const ctx = overlay.ctx;
+  let origin = touch?.origin;
+  let knob = touch?.knob || touch?.pos || origin;
+  if (!touch.active && hasPending) {
+    const entry = pending.values().next().value;
+    if (entry) {
+      origin = { x: entry.x, y: entry.y };
+      knob = origin;
+    }
+  }
+  const radius = touch.radius ?? 60;
+
+  if (origin && knob) {
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(240, 240, 240, 0.7)";
+    ctx.fillStyle = "rgba(120, 180, 255, 0.18)";
+
+    ctx.beginPath();
+    ctx.arc(origin.x, origin.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(240, 240, 240, 0.85)";
+    ctx.beginPath();
+    ctx.arc(knob.x, knob.y, radius * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  if (jumpPos) {
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(255, 220, 120, 0.9)";
+    ctx.fillStyle = "rgba(255, 220, 120, 0.2)";
+    ctx.beginPath();
+    ctx.arc(jumpPos.x, jumpPos.y, 24, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
 };

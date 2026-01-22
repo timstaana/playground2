@@ -100,8 +100,7 @@
       "width": 1,
       "height": 1,
       "billboard": false,
-      "animate": true,
-      "interaction": false
+      "animate": true
     }
   ],
   "blocks": [

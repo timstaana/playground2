@@ -7,7 +7,7 @@ let uiFont = null;
 let renderState = null;
 
 function setup() {
-  createCanvas(windowWidth, windowHeight, WEBGL);
+  const canvas = createCanvas(windowWidth, windowHeight, WEBGL);
   frameRate(60);
   renderState = {
     spriteShader: Game.rendering.createSpriteShader(),
@@ -15,6 +15,7 @@ function setup() {
     uiFont: null,
   };
   Game.ui?.ensureOverlay?.();
+  Game.systems.attachTouchEvents?.(canvas?.elt);
 
   loadLevel();
 }
@@ -78,8 +79,27 @@ function keyPressed() {
 
 function mousePressed() {
   if (Game.systems?.inputState) {
+    const lastTouchTime = Game.systems.inputState.lastTouchTime || 0;
+    if (Date.now() - lastTouchTime < 300) {
+      return;
+    }
     Game.systems.inputState.clickRequested = true;
   }
+}
+
+function touchStarted(event) {
+  Game.systems.handleTouchStart?.(event);
+  return false;
+}
+
+function touchMoved(event) {
+  Game.systems.handleTouchMove?.(event);
+  return false;
+}
+
+function touchEnded(event) {
+  Game.systems.handleTouchEnd?.(event);
+  return false;
 }
 
 function updateSystems(worldRef, dt) {
