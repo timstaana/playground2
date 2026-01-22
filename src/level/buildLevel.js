@@ -44,6 +44,7 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     lightboxDistanceScale: interactionDef.lightboxDistanceScale ?? 1.4,
     lightboxDistanceOffset: interactionDef.lightboxDistanceOffset ?? 0.6,
     lightboxYOffset: interactionDef.lightboxYOffset ?? 0,
+    lightboxSmooth: interactionDef.lightboxSmooth ?? 0.2,
     dialogueDistanceScale:
       interactionDef.dialogueDistanceScale ??
       interactionDef.lightboxDistanceScale ??
@@ -330,6 +331,7 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
         distanceOffset:
           lightboxConfig.distanceOffset ?? interactionDefaults.lightboxDistanceOffset,
         yOffset: lightboxConfig.yOffset ?? interactionDefaults.lightboxYOffset,
+        smooth: lightboxConfig.smooth ?? interactionDefaults.lightboxSmooth,
       });
     }
     Game.ecs.addComponent(worldRef, "BillboardSprite", painting, {
@@ -368,8 +370,18 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     side: cameraDef.side ?? 0,
     smooth: cameraDef.smooth ?? 0.15,
   });
+  const initialLookHeight = cameraDef.lookHeight ?? 1;
   Game.ecs.addComponent(worldRef, "CameraRig", cameraEntity, {
     yaw: worldRef.components.Transform.get(player).rotY,
+    dialogueBlend: 0,
+    lookOffsetY: 0,
+    focusBlend: 0,
+    dialogueTargetId: null,
+    lookAt: {
+      x: spawn.x,
+      y: spawn.y + initialLookHeight,
+      z: spawn.z,
+    },
   });
   Game.ecs.addComponent(worldRef, "Lightbox", cameraEntity, {
     mode: "follow",
@@ -377,6 +389,7 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     distanceScale: interactionDefaults.lightboxDistanceScale,
     distanceOffset: interactionDefaults.lightboxDistanceOffset,
     yOffset: interactionDefaults.lightboxYOffset,
+    smooth: interactionDefaults.lightboxSmooth,
   });
   Game.ecs.addComponent(worldRef, "DialogueState", cameraEntity, {
     mode: "idle",

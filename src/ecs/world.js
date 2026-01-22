@@ -20,6 +20,7 @@ Game.ecs.createWorld = function createWorld() {
       Lightbox: new Map(),
       Dialogue: new Map(),
       DialogueState: new Map(),
+      DialogueFacing: new Map(),
       Highlight: new Map(),
       Label: new Map(),
       Speed: new Map(),
@@ -47,6 +48,10 @@ Game.ecs.createWorld = function createWorld() {
         occluderConeHeights: 3,
         occluderFadeDistance: 3.5,
         occluderAmbient: 150 / 255,
+      },
+      interactionFocus: {
+        targetId: null,
+        weight: 0,
       },
     },
   };

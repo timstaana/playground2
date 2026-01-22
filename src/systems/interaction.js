@@ -1,6 +1,62 @@
 window.Game = window.Game || {};
 Game.systems = Game.systems || {};
 
+Game.systems.applyDialogueFacing = function applyDialogueFacing(
+  worldRef,
+  playerId,
+  targetId
+) {
+  if (!worldRef || !playerId || !targetId) {
+    return;
+  }
+  if (!worldRef.components.NPC.has(targetId)) {
+    return;
+  }
+  const playerTransform = worldRef.components.Transform.get(playerId);
+  const targetTransform = worldRef.components.Transform.get(targetId);
+  if (!playerTransform || !targetTransform) {
+    return;
+  }
+  const facingMap = worldRef.components.DialogueFacing;
+  if (!facingMap.has(targetId)) {
+    facingMap.set(targetId, { rotY: targetTransform.rotY });
+  }
+  const dir = {
+    x: playerTransform.pos.x - targetTransform.pos.x,
+    z: playerTransform.pos.z - targetTransform.pos.z,
+  };
+  targetTransform.rotY = Math.atan2(dir.x, -dir.z);
+  worldRef.components.Transform.set(targetId, targetTransform);
+};
+
+Game.systems.clearDialogueFacing = function clearDialogueFacing(worldRef) {
+  const facingMap = worldRef?.components?.DialogueFacing;
+  if (!facingMap || facingMap.size === 0) {
+    return;
+  }
+  for (const [entity, data] of facingMap.entries()) {
+    const transform = worldRef.components.Transform.get(entity);
+    if (transform && data && typeof data.rotY === "number") {
+      transform.rotY = data.rotY;
+      worldRef.components.Transform.set(entity, transform);
+    }
+  }
+  facingMap.clear();
+};
+
+Game.systems.setInteractionFocus = function setInteractionFocus(
+  worldRef,
+  focus
+) {
+  if (!worldRef || !worldRef.resources) {
+    return;
+  }
+  worldRef.resources.interactionFocus = {
+    targetId: focus?.targetId ?? null,
+    weight: focus?.weight ?? 0,
+  };
+};
+
 Game.systems.interactionSystem = function interactionSystem(worldRef) {
   const inputState = Game.systems.inputState || {};
   const playerId = worldRef.resources.playerId;
@@ -10,6 +66,8 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
     highlightMap.clear();
   }
   if (!playerId) {
+    Game.systems.clearDialogueFacing(worldRef);
+    Game.systems.setInteractionFocus(worldRef, null);
     inputState.clickRequested = false;
     return;
   }
@@ -21,10 +79,14 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
     ? worldRef.components.DialogueState.get(cameraId)
     : null;
   if (!lightbox) {
+    Game.systems.clearDialogueFacing(worldRef);
+    Game.systems.setInteractionFocus(worldRef, null);
     inputState.clickRequested = false;
     return;
   }
   if (!dialogueState) {
+    Game.systems.clearDialogueFacing(worldRef);
+    Game.systems.setInteractionFocus(worldRef, null);
     inputState.clickRequested = false;
     return;
   }
@@ -33,6 +95,8 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
   const playerCollider = worldRef.components.Collider.get(playerId);
   const move = worldRef.components.MoveIntent.get(playerId);
   if (!playerTransform || !playerCollider) {
+    Game.systems.clearDialogueFacing(worldRef);
+    Game.systems.setInteractionFocus(worldRef, null);
     inputState.clickRequested = false;
     return;
   }
@@ -43,6 +107,8 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
     !!move && (Math.abs(move.throttle) > 0.01 || Math.abs(move.turn) > 0.01);
 
   if (lightbox.mode === "lightbox") {
+    Game.systems.clearDialogueFacing(worldRef);
+    Game.systems.setInteractionFocus(worldRef, null);
     if (spacePressed || clickRequested || moveInput) {
       lightbox.mode = "follow";
       lightbox.targetId = null;
@@ -57,10 +123,17 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
   }
 
   if (dialogueState.mode === "dialogue") {
+    Game.systems.applyDialogueFacing(
+      worldRef,
+      playerId,
+      dialogueState.targetId
+    );
+    Game.systems.setInteractionFocus(worldRef, null);
     if (spacePressed || clickRequested || moveInput) {
       dialogueState.mode = "idle";
       dialogueState.targetId = null;
       worldRef.components.DialogueState.set(cameraId, dialogueState);
+      Game.systems.clearDialogueFacing(worldRef);
       if (move && spacePressed) {
         move.jumpRequested = false;
         worldRef.components.MoveIntent.set(playerId, move);
@@ -76,6 +149,16 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
     playerCollider,
     highlightMap
   );
+  if (nearest) {
+    const range = nearest.range ?? 1.5;
+    const weight = Math.max(0, Math.min(1, 1 - nearest.dist / range));
+    Game.systems.setInteractionFocus(worldRef, {
+      targetId: nearest.entity,
+      weight,
+    });
+  } else {
+    Game.systems.setInteractionFocus(worldRef, null);
+  }
 
   if (nearest && (spacePressed || clickRequested)) {
     const interaction = nearest.interaction || {};
@@ -87,6 +170,7 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
         lightbox.distanceOffset =
           targetLightbox.distanceOffset ?? lightbox.distanceOffset;
         lightbox.yOffset = targetLightbox.yOffset ?? lightbox.yOffset;
+        lightbox.smooth = targetLightbox.smooth ?? lightbox.smooth;
       }
       lightbox.mode = "lightbox";
       lightbox.targetId = nearest.entity;
@@ -95,6 +179,7 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
       dialogueState.mode = "dialogue";
       dialogueState.targetId = nearest.entity;
       worldRef.components.DialogueState.set(cameraId, dialogueState);
+      Game.systems.applyDialogueFacing(worldRef, playerId, nearest.entity);
     }
 
     if (move) {
@@ -114,6 +199,10 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
   } else if (nearest && spacePressed && move) {
     move.jumpRequested = false;
     worldRef.components.MoveIntent.set(playerId, move);
+  }
+
+  if (dialogueState.mode !== "dialogue") {
+    Game.systems.clearDialogueFacing(worldRef);
   }
 
   inputState.clickRequested = false;
@@ -197,7 +286,7 @@ Game.systems.scanInteractionTargets = function scanInteractionTargets(
 
     if (dist <= range && dist < closestDist) {
       closestDist = dist;
-      closest = { entity, dist, interaction: { ...interaction, kind } };
+      closest = { entity, dist, range, interaction: { ...interaction, kind } };
     }
   }
 
