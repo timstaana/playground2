@@ -192,7 +192,7 @@ Game.ui.renderTouchControls = function renderTouchControls() {
       knob = origin;
     }
   }
-  const radius = touch.radius ?? 60;
+  const radius = touch.radius ?? 70;
 
   if (origin && knob) {
     ctx.save();
@@ -221,7 +221,7 @@ Game.ui.renderTouchControls = function renderTouchControls() {
     ctx.strokeStyle = "rgba(255, 220, 120, 0.9)";
     ctx.fillStyle = "rgba(255, 220, 120, 0.2)";
     ctx.beginPath();
-    ctx.arc(jumpPos.x, jumpPos.y, 24, 0, Math.PI * 2);
+    ctx.arc(jumpPos.x, jumpPos.y, radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
