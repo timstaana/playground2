@@ -85,6 +85,26 @@ Game.systems.clampCameraToBlocks = function clampCameraToBlocks(
   return { x: to.x, y: to.y, z: to.z };
 };
 
+Game.systems.setCameraState = function setCameraState(
+  worldRef,
+  pos,
+  lookAt
+) {
+  if (!worldRef || !worldRef.resources) {
+    return;
+  }
+  const aspect =
+    typeof width === "number" && typeof height === "number" && height > 0
+      ? width / height
+      : 1;
+  worldRef.resources.cameraState = {
+    pos: { x: pos.x, y: pos.y, z: pos.z },
+    lookAt: { x: lookAt.x, y: lookAt.y, z: lookAt.z },
+    fov: worldRef.resources.cameraState?.fov ?? Math.PI / 3,
+    aspect,
+  };
+};
+
 Game.systems.cameraSystem = function cameraSystem(worldRef) {
   const cameraId = worldRef.resources.cameraId;
   if (!cameraId) {
@@ -155,6 +175,7 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
       null,
       smooth
     );
+    Game.systems.setCameraState(worldRef, cameraTransform.pos, smoothedCenter);
     worldRef.components.Transform.set(cameraId, cameraTransform);
     return;
   }
@@ -302,6 +323,7 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
       1,
       0
     );
+    Game.systems.setCameraState(worldRef, cameraTransform.pos, lookAt);
     worldRef.components.Transform.set(cameraId, cameraTransform);
     return;
   }
@@ -455,7 +477,9 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
       1,
       0
     );
-
+    if (entity === cameraId) {
+      Game.systems.setCameraState(worldRef, activeCameraTransform.pos, lookAt);
+    }
     worldRef.components.Transform.set(entity, activeCameraTransform);
   }
 };

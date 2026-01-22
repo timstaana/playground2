@@ -5,7 +5,9 @@ Game.systems.inputState = {
   jumpHeld: false,
   spacePressed: false,
   clickRequested: false,
+  clickPosition: null,
   touchJumpQueued: false,
+  touchJumpPressed: false,
   lastTouchTime: 0,
   lastPointerTime: 0,
   pointerActive: false,
@@ -33,6 +35,7 @@ Game.systems.inputSystem = function inputSystem(worldRef) {
   const spacePressed = (jumpDown && !state.jumpHeld) || touchJump;
   state.jumpHeld = jumpDown;
   state.spacePressed = spacePressed;
+  state.touchJumpPressed = touchJump;
   state.touchJumpQueued = false;
 
   let turn = turnKeys;

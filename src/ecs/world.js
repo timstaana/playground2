@@ -38,6 +38,12 @@ Game.ecs.createWorld = function createWorld() {
         playerFront: null,
         playerBack: null,
       },
+      cameraState: {
+        pos: { x: 0, y: 0, z: 0 },
+        lookAt: { x: 0, y: 0, z: 0 },
+        fov: Math.PI / 3,
+        aspect: 1,
+      },
       rendering: {
         occluderAlpha: 0.35,
         occluderDitherScale: 1,

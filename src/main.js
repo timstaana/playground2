@@ -84,6 +84,7 @@ function mousePressed() {
       return;
     }
     Game.systems.inputState.clickRequested = true;
+    Game.systems.inputState.clickPosition = { x: mouseX, y: mouseY };
   }
 }
 

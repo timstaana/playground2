@@ -15,6 +15,7 @@ Game.systems.ensureTouchState = function ensureTouchState() {
       deadZone: 0.12,
       dragThreshold: 10,
       jumpId: null,
+      multiTouch: false,
       pending: new Map(),
     };
   }
@@ -77,6 +78,7 @@ Game.systems.handleTouchStart = function handleTouchStart(event) {
         touchState.jumpId = point.id;
         touchState.jumpPos = { x: point.x, y: point.y };
         state.touchJumpQueued = true;
+        touchState.multiTouch = true;
         continue;
       }
     }
@@ -85,7 +87,9 @@ Game.systems.handleTouchStart = function handleTouchStart(event) {
         touchState.jumpId = point.id;
         state.touchJumpQueued = true;
         touchState.jumpPos = { x: point.x, y: point.y };
+        touchState.multiTouch = true;
       } else {
+        touchState.multiTouch = true;
         touchState.pending.set(point.id, {
           x: point.x,
           y: point.y,
@@ -186,11 +190,19 @@ Game.systems.handleTouchEnd = function handleTouchEnd(event) {
       const dx = point.x - pending.x;
       const dy = point.y - pending.y;
       const moved = Math.hypot(dx, dy);
-      if (moved < threshold) {
+      if (moved < threshold && !touchState.multiTouch) {
         state.clickRequested = true;
+        state.clickPosition = { x: point.x, y: point.y };
       }
       touchState.pending.delete(point.id);
     }
+  }
+  if (
+    !touchState.active &&
+    touchState.jumpId === null &&
+    touchState.pending.size === 0
+  ) {
+    touchState.multiTouch = false;
   }
   if (event && typeof event.preventDefault === "function") {
     event.preventDefault();

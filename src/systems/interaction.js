@@ -69,6 +69,7 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
     Game.systems.clearDialogueFacing(worldRef);
     Game.systems.setInteractionFocus(worldRef, null);
     inputState.clickRequested = false;
+    inputState.clickPosition = null;
     return;
   }
 
@@ -82,12 +83,14 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
     Game.systems.clearDialogueFacing(worldRef);
     Game.systems.setInteractionFocus(worldRef, null);
     inputState.clickRequested = false;
+    inputState.clickPosition = null;
     return;
   }
   if (!dialogueState) {
     Game.systems.clearDialogueFacing(worldRef);
     Game.systems.setInteractionFocus(worldRef, null);
     inputState.clickRequested = false;
+    inputState.clickPosition = null;
     return;
   }
 
@@ -98,27 +101,31 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
     Game.systems.clearDialogueFacing(worldRef);
     Game.systems.setInteractionFocus(worldRef, null);
     inputState.clickRequested = false;
+    inputState.clickPosition = null;
     return;
   }
 
   const spacePressed = !!inputState.spacePressed;
   const clickRequested = !!inputState.clickRequested;
+  const touchJumpPressed = !!inputState.touchJumpPressed;
+  const interactionPressed = spacePressed && !touchJumpPressed;
   const moveInput =
     !!move && (Math.abs(move.throttle) > 0.01 || Math.abs(move.turn) > 0.01);
 
   if (lightbox.mode === "lightbox") {
     Game.systems.clearDialogueFacing(worldRef);
     Game.systems.setInteractionFocus(worldRef, null);
-    if (spacePressed || clickRequested || moveInput) {
+    if (interactionPressed || clickRequested || moveInput) {
       lightbox.mode = "follow";
       lightbox.targetId = null;
       worldRef.components.Lightbox.set(cameraId, lightbox);
-      if (move && spacePressed) {
+      if (move && interactionPressed) {
         move.jumpRequested = false;
         worldRef.components.MoveIntent.set(playerId, move);
       }
     }
     inputState.clickRequested = false;
+    inputState.clickPosition = null;
     return;
   }
 
@@ -129,17 +136,18 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
       dialogueState.targetId
     );
     Game.systems.setInteractionFocus(worldRef, null);
-    if (spacePressed || clickRequested || moveInput) {
+    if (interactionPressed || clickRequested || moveInput) {
       dialogueState.mode = "idle";
       dialogueState.targetId = null;
       worldRef.components.DialogueState.set(cameraId, dialogueState);
       Game.systems.clearDialogueFacing(worldRef);
-      if (move && spacePressed) {
+      if (move && interactionPressed) {
         move.jumpRequested = false;
         worldRef.components.MoveIntent.set(playerId, move);
       }
     }
     inputState.clickRequested = false;
+    inputState.clickPosition = null;
     return;
   }
 
@@ -149,6 +157,14 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
     playerCollider,
     highlightMap
   );
+  let clickTarget = null;
+  if (clickRequested && inputState.clickPosition) {
+    clickTarget = Game.systems.pickHighlightedEntity(
+      worldRef,
+      inputState.clickPosition.x,
+      inputState.clickPosition.y
+    );
+  }
   if (nearest) {
     const range = nearest.range ?? 1.5;
     const weight = Math.max(0, Math.min(1, 1 - nearest.dist / range));
@@ -160,10 +176,18 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
     Game.systems.setInteractionFocus(worldRef, null);
   }
 
-  if (nearest && (spacePressed || clickRequested)) {
-    const interaction = nearest.interaction || {};
+  const clickValid = !!clickTarget;
+  const activeTarget = clickValid ? clickTarget.entity : nearest?.entity;
+  const activeInteraction = clickValid
+    ? worldRef.components.Interaction.get(clickTarget.entity) || {}
+    : nearest?.interaction || {};
+  const kind =
+    activeInteraction.kind || activeInteraction.type || "lightbox";
+
+  if (activeTarget && (interactionPressed || clickValid)) {
+    const interaction = { ...activeInteraction, kind };
     if (interaction.kind === "lightbox") {
-      const targetLightbox = worldRef.components.Lightbox.get(nearest.entity);
+      const targetLightbox = worldRef.components.Lightbox.get(activeTarget);
       if (targetLightbox) {
         lightbox.distanceScale =
           targetLightbox.distanceScale ?? lightbox.distanceScale;
@@ -173,13 +197,13 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
         lightbox.smooth = targetLightbox.smooth ?? lightbox.smooth;
       }
       lightbox.mode = "lightbox";
-      lightbox.targetId = nearest.entity;
+      lightbox.targetId = activeTarget;
       worldRef.components.Lightbox.set(cameraId, lightbox);
     } else if (interaction.kind === "dialogue") {
       dialogueState.mode = "dialogue";
-      dialogueState.targetId = nearest.entity;
+      dialogueState.targetId = activeTarget;
       worldRef.components.DialogueState.set(cameraId, dialogueState);
-      Game.systems.applyDialogueFacing(worldRef, playerId, nearest.entity);
+      Game.systems.applyDialogueFacing(worldRef, playerId, activeTarget);
     }
 
     if (move) {
@@ -196,7 +220,7 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
       vel.z = 0;
       worldRef.components.Velocity.set(playerId, vel);
     }
-  } else if (nearest && spacePressed && move) {
+  } else if (nearest && interactionPressed && move) {
     move.jumpRequested = false;
     worldRef.components.MoveIntent.set(playerId, move);
   }
@@ -206,6 +230,7 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
   }
 
   inputState.clickRequested = false;
+  inputState.clickPosition = null;
 };
 
 Game.systems.scanInteractionTargets = function scanInteractionTargets(
@@ -337,4 +362,137 @@ Game.systems.distancePointToAabb = function distancePointToAabb(
       ? point.z - max.z
       : 0;
   return Math.hypot(dx, dy, dz);
+};
+
+Game.systems.normalizeVector = function normalizeVector(vec) {
+  const len = Math.hypot(vec.x, vec.y, vec.z);
+  if (!len) {
+    return { x: 0, y: 0, z: 0 };
+  }
+  return { x: vec.x / len, y: vec.y / len, z: vec.z / len };
+};
+
+Game.systems.crossVector = function crossVector(a, b) {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  };
+};
+
+Game.systems.getCameraRayFromScreen = function getCameraRayFromScreen(
+  worldRef,
+  screenX,
+  screenY
+) {
+  const cameraState = worldRef?.resources?.cameraState;
+  if (!cameraState) {
+    return null;
+  }
+  const pos = cameraState.pos;
+  const lookAt = cameraState.lookAt;
+  if (!pos || !lookAt) {
+    return null;
+  }
+  const fov = cameraState.fov ?? Math.PI / 3;
+  const aspect =
+    cameraState.aspect ||
+    (typeof width === "number" && typeof height === "number" && height > 0
+      ? width / height
+      : 1);
+  const viewDir = Game.systems.normalizeVector({
+    x: lookAt.x - pos.x,
+    y: lookAt.y - pos.y,
+    z: lookAt.z - pos.z,
+  });
+  const up = { x: 0, y: 1, z: 0 };
+  const right = Game.systems.normalizeVector(Game.systems.crossVector(viewDir, up));
+  const trueUp = Game.systems.normalizeVector(Game.systems.crossVector(right, viewDir));
+  const ndcX =
+    typeof width === "number" && width > 0 ? (screenX / width) * 2 - 1 : 0;
+  const ndcY =
+    typeof height === "number" && height > 0 ? 1 - (screenY / height) * 2 : 0;
+  const tanFov = Math.tan(fov / 2);
+  const dir = Game.systems.normalizeVector({
+    x: viewDir.x + right.x * ndcX * aspect * tanFov + trueUp.x * ndcY * tanFov,
+    y: viewDir.y + right.y * ndcX * aspect * tanFov + trueUp.y * ndcY * tanFov,
+    z: viewDir.z + right.z * ndcX * aspect * tanFov + trueUp.z * ndcY * tanFov,
+  });
+  return { origin: pos, dir };
+};
+
+Game.systems.rayIntersectAabb = function rayIntersectAabb(
+  origin,
+  dir,
+  min,
+  max
+) {
+  let tMin = -Infinity;
+  let tMax = Infinity;
+  const axes = ["x", "y", "z"];
+  for (const axis of axes) {
+    const o = origin[axis];
+    const d = dir[axis];
+    const minVal = min[axis];
+    const maxVal = max[axis];
+    if (Math.abs(d) < 1e-6) {
+      if (o < minVal || o > maxVal) {
+        return null;
+      }
+      continue;
+    }
+    const t1 = (minVal - o) / d;
+    const t2 = (maxVal - o) / d;
+    const tNear = Math.min(t1, t2);
+    const tFar = Math.max(t1, t2);
+    tMin = Math.max(tMin, tNear);
+    tMax = Math.min(tMax, tFar);
+    if (tMin > tMax) {
+      return null;
+    }
+  }
+  if (tMax < 0) {
+    return null;
+  }
+  return tMin >= 0 ? tMin : tMax;
+};
+
+Game.systems.pickHighlightedEntity = function pickHighlightedEntity(
+  worldRef,
+  screenX,
+  screenY
+) {
+  const highlights = worldRef?.components?.Highlight;
+  if (!highlights || highlights.size === 0) {
+    return null;
+  }
+  const ray = Game.systems.getCameraRayFromScreen(worldRef, screenX, screenY);
+  if (!ray) {
+    return null;
+  }
+  let closest = null;
+  let closestT = Infinity;
+  for (const [entity] of highlights.entries()) {
+    const transform = worldRef.components.Transform.get(entity);
+    const collider = worldRef.components.Collider.get(entity);
+    if (!transform || !collider) {
+      continue;
+    }
+    const min = {
+      x: transform.pos.x - collider.w / 2,
+      y: transform.pos.y,
+      z: transform.pos.z - collider.d / 2,
+    };
+    const max = {
+      x: transform.pos.x + collider.w / 2,
+      y: transform.pos.y + collider.h,
+      z: transform.pos.z + collider.d / 2,
+    };
+    const t = Game.systems.rayIntersectAabb(ray.origin, ray.dir, min, max);
+    if (t !== null && t < closestT) {
+      closestT = t;
+      closest = entity;
+    }
+  }
+  return closest ? { entity: closest, distance: closestT } : null;
 };
