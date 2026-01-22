@@ -117,6 +117,10 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
         });
         continue;
       }
+
+      if (worldRef.components.Painting.has(entity)) {
+        continue;
+      }
     }
 
     const center = {
@@ -274,6 +278,8 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
     }
   }
 
+  Game.systems.drawPaintingLoadingIndicators(worldRef, cameraWorld, renderState);
+
   if (Game.debug?.enabled) {
     Game.systems.drawDebugOverlay(worldRef, cameraWorld, renderState);
   } else {
@@ -281,6 +287,109 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
   }
 
 };
+
+Game.systems.drawPaintingLoadingIndicators =
+  function drawPaintingLoadingIndicators(worldRef, cameraWorld, renderState) {
+    if (!worldRef) {
+      return;
+    }
+    const streaming = worldRef.resources.paintingStreaming;
+    const loading = streaming?.loading;
+    if (!loading || loading.size === 0) {
+      return;
+    }
+    const playerId = worldRef.resources.playerId;
+    const playerTransform = playerId
+      ? worldRef.components.Transform.get(playerId)
+      : null;
+    if (!playerTransform) {
+      return;
+    }
+    const defaultRadius =
+      streaming.indicatorRadius ?? streaming.loadRadius ?? 6;
+
+    resetShader();
+    blendMode(BLEND);
+    noLights();
+    Game.rendering.clearTexture();
+    if (renderState?.uiFont) {
+      textFont(renderState.uiFont);
+    }
+    textSize(12);
+    textAlign(CENTER, CENTER);
+
+    for (const [entity, painting] of worldRef.components.Painting.entries()) {
+      const textureKey = painting?.textureKey || painting?.id;
+      if (!textureKey || !loading.has(textureKey)) {
+        continue;
+      }
+      const transform = worldRef.components.Transform.get(entity);
+      const collider = worldRef.components.Collider.get(entity);
+      const sprite = worldRef.components.BillboardSprite.get(entity);
+      if (!transform || !collider || !sprite) {
+        continue;
+      }
+      const radius = painting.indicatorRadius ?? defaultRadius;
+      const dx = transform.pos.x - playerTransform.pos.x;
+      const dy = transform.pos.y - playerTransform.pos.y;
+      const dz = transform.pos.z - playerTransform.pos.z;
+      const dist = Math.hypot(dx, dy, dz);
+      if (dist > radius) {
+        continue;
+      }
+
+      const labelData = worldRef.components.Label.get(entity);
+      let color = [255, 120, 200];
+      if (
+        labelData &&
+        Array.isArray(labelData.color) &&
+        labelData.color.length >= 3
+      ) {
+        color = labelData.color;
+      }
+
+      const center = {
+        x: transform.pos.x,
+        y: transform.pos.y + (sprite.offsetY ?? collider.h / 2),
+        z: transform.pos.z,
+      };
+      const worldPos = Game.utils.gameToWorld(center);
+      let yaw = transform.rotY;
+      let pitch = sprite.pitch ?? 0;
+      if (sprite.billboard !== false) {
+        const toCamWorld = {
+          x: cameraWorld.x - worldPos.x,
+          y: cameraWorld.y - worldPos.y,
+          z: cameraWorld.z - worldPos.z,
+        };
+        const horiz = Math.hypot(toCamWorld.x, toCamWorld.z);
+        yaw = Math.atan2(toCamWorld.x, toCamWorld.z);
+        pitch = Math.atan2(toCamWorld.y, horiz || 1);
+      }
+
+      const width = sprite.width ?? collider.w;
+      const height = sprite.height ?? collider.h;
+      const depth = 0.04;
+
+      push();
+      translate(worldPos.x, worldPos.y, worldPos.z);
+      rotateY(yaw);
+      rotateX(pitch);
+      noFill();
+      stroke(color[0], color[1], color[2]);
+      strokeWeight(2);
+      box(
+        width * Game.config.gridSize,
+        height * Game.config.gridSize,
+        depth * Game.config.gridSize
+      );
+      translate(0, 0, depth * Game.config.gridSize * 0.6);
+      noStroke();
+      fill(color[0], color[1], color[2]);
+      text("Loading", 0, 0);
+      pop();
+    }
+  };
 
 Game.systems.drawCharacterLabels = function drawCharacterLabels(
   worldRef,

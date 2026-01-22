@@ -49,6 +49,13 @@ Game.ecs.createWorld = function createWorld() {
         occluderFadeDistance: 3.5,
         occluderAmbient: 150 / 255,
       },
+      paintingStreaming: {
+        loadRadius: 6,
+        indicatorRadius: 6,
+        maxConcurrent: 2,
+        loading: new Map(),
+        failed: new Set(),
+      },
       interactionFocus: {
         targetId: null,
         weight: 0,

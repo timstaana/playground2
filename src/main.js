@@ -85,6 +85,7 @@ function mousePressed() {
 function updateSystems(worldRef, dt) {
   Game.systems.inputSystem(worldRef);
   Game.systems.interactionSystem(worldRef);
+  Game.systems.paintingStreamingSystem?.(worldRef);
   const cameraId = worldRef.resources.cameraId;
   const lightbox = cameraId
     ? worldRef.components.Lightbox.get(cameraId)

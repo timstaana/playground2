@@ -221,6 +221,10 @@ Game.systems.scanInteractionTargets = function scanInteractionTargets(
     y: playerTransform.pos.y + playerCollider.h / 2,
     z: playerTransform.pos.z,
   };
+  const playerForward = {
+    x: Math.sin(playerTransform.rotY),
+    z: -Math.cos(playerTransform.rotY),
+  };
 
   for (const [entity, interaction] of worldRef.components.Interaction.entries()) {
     if (interaction && interaction.enabled === false) {
@@ -246,6 +250,22 @@ Game.systems.scanInteractionTargets = function scanInteractionTargets(
 
     const dist = Game.systems.distancePointToAabb(playerCenter, min, max);
     const range = interaction?.range ?? 1.5;
+    if (interaction?.requireFacing) {
+      const toTarget = {
+        x: transform.pos.x - playerTransform.pos.x,
+        z: transform.pos.z - playerTransform.pos.z,
+      };
+      const len = Math.hypot(toTarget.x, toTarget.z);
+      if (len > 0.0001) {
+        const dot =
+          (toTarget.x / len) * playerForward.x +
+          (toTarget.z / len) * playerForward.z;
+        const facingDot = interaction?.facingDot ?? 0.2;
+        if (dot < facingDot) {
+          continue;
+        }
+      }
+    }
     if (dist <= range) {
       const labelData = worldRef.components.Label.get(entity);
       let highlightColor = null;

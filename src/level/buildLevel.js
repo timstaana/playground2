@@ -1,6 +1,60 @@
 window.Game = window.Game || {};
 Game.level = Game.level || {};
 
+Game.level.fitSpriteToBounds = function fitSpriteToBounds(width, height, aspect) {
+  let fittedWidth = width;
+  let fittedHeight = height;
+  if (aspect && width > 0 && height > 0) {
+    const boundRatio = width / height;
+    if (aspect >= boundRatio) {
+      fittedWidth = width;
+      fittedHeight = width / aspect;
+    } else {
+      fittedHeight = height;
+      fittedWidth = height * aspect;
+    }
+  } else if (aspect && width > 0) {
+    fittedWidth = width;
+    fittedHeight = width / aspect;
+  } else if (aspect && height > 0) {
+    fittedHeight = height;
+    fittedWidth = height * aspect;
+  }
+  return { width: fittedWidth, height: fittedHeight };
+};
+
+Game.level.updatePaintingSpriteForTexture =
+  function updatePaintingSpriteForTexture(worldRef, textureKey) {
+    if (!worldRef || !textureKey) {
+      return;
+    }
+    const texRef = worldRef.resources?.textures?.[textureKey];
+    const texSource = texRef?.source || texRef?.texture;
+    if (!texSource || !texSource.width || !texSource.height) {
+      return;
+    }
+    const aspect = texSource.width / texSource.height;
+    for (const [entity, painting] of worldRef.components.Painting.entries()) {
+      const paintingKey = painting?.textureKey || painting?.id;
+      if (paintingKey !== textureKey) {
+        continue;
+      }
+      const collider = worldRef.components.Collider.get(entity);
+      const sprite = worldRef.components.BillboardSprite.get(entity);
+      if (!collider || !sprite) {
+        continue;
+      }
+      const fit = Game.level.fitSpriteToBounds(
+        collider.w,
+        collider.h,
+        aspect
+      );
+      sprite.width = fit.width;
+      sprite.height = fit.height;
+      worldRef.components.BillboardSprite.set(entity, sprite);
+    }
+  };
+
 Game.level.buildLevel = function buildLevel(worldRef, level) {
   Game.config.gridSize = level.gridSize || Game.config.gridSize;
 
@@ -41,6 +95,8 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     renderingDef.occluderAmbient ?? worldRef.resources.rendering.occluderAmbient;
   const interactionDefaults = {
     range: interactionDef.range ?? 1.5,
+    requireFacing: interactionDef.requireFacing ?? true,
+    facingDot: interactionDef.facingDot ?? 0.2,
     lightboxDistanceScale: interactionDef.lightboxDistanceScale ?? 1.4,
     lightboxDistanceOffset: interactionDef.lightboxDistanceOffset ?? 0.6,
     lightboxYOffset: interactionDef.lightboxYOffset ?? 0,
@@ -59,6 +115,22 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
       interactionDef.dialogueSide ??
       0.6,
   };
+  const streamingDef = level.paintingStreaming || level.streaming || {};
+  const paintingStreaming = worldRef.resources.paintingStreaming;
+  if (paintingStreaming) {
+    paintingStreaming.loadRadius =
+      streamingDef.loadRadius ??
+      streamingDef.paintingLoadRadius ??
+      paintingStreaming.loadRadius;
+    paintingStreaming.indicatorRadius =
+      streamingDef.indicatorRadius ??
+      streamingDef.loadRadius ??
+      paintingStreaming.indicatorRadius;
+    paintingStreaming.maxConcurrent =
+      streamingDef.maxConcurrent ??
+      streamingDef.paintingMaxConcurrent ??
+      paintingStreaming.maxConcurrent;
+  }
 
   const blocks = level.blocks || [];
   for (const block of blocks) {
@@ -209,6 +281,9 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
       Game.ecs.addComponent(worldRef, "Interaction", npc, {
         kind: interactionConfig.kind || interactionConfig.type || "dialogue",
         range: interactionConfig.range ?? interactionDefaults.range,
+        requireFacing:
+          interactionConfig.requireFacing ?? interactionDefaults.requireFacing,
+        facingDot: interactionConfig.facingDot ?? interactionDefaults.facingDot,
         highlightColor: interactionConfig.highlightColor || null,
         highlightScale: interactionConfig.highlightScale ?? null,
         highlightThickness: interactionConfig.highlightThickness ?? null,
@@ -269,24 +344,9 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
       texSource && texSource.width && texSource.height
         ? texSource.width / texSource.height
         : null;
-    let fittedWidth = width;
-    let fittedHeight = height;
-    if (aspect && width > 0 && height > 0) {
-      const boundRatio = width / height;
-      if (aspect >= boundRatio) {
-        fittedWidth = width;
-        fittedHeight = width / aspect;
-      } else {
-        fittedHeight = height;
-        fittedWidth = height * aspect;
-      }
-    } else if (aspect && width > 0) {
-      fittedWidth = width;
-      fittedHeight = width / aspect;
-    } else if (aspect && height > 0) {
-      fittedHeight = height;
-      fittedWidth = height * aspect;
-    }
+    const fit = Game.level.fitSpriteToBounds(width, height, aspect);
+    const fittedWidth = fit.width;
+    const fittedHeight = fit.height;
 
     const bottomCenter = {
       x: anchorPos.x + width / 2,
@@ -316,6 +376,9 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
       Game.ecs.addComponent(worldRef, "Interaction", painting, {
         kind: interactionConfig.kind || interactionConfig.type || "lightbox",
         range: interactionConfig.range ?? interactionDefaults.range,
+        requireFacing:
+          interactionConfig.requireFacing ?? interactionDefaults.requireFacing,
+        facingDot: interactionConfig.facingDot ?? interactionDefaults.facingDot,
         highlightColor: interactionConfig.highlightColor || null,
         highlightScale: interactionConfig.highlightScale ?? null,
         highlightThickness: interactionConfig.highlightThickness ?? null,
@@ -348,6 +411,14 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     });
     Game.ecs.addComponent(worldRef, "Painting", painting, {
       id: paintingDef.id || textureKey,
+      textureKey,
+      image: paintingDef.image || paintingDef.src || null,
+      loadRadius:
+        paintingDef.loadRadius ??
+        paintingDef.streamingRadius ??
+        paintingDef.lazyRadius ??
+        null,
+      indicatorRadius: paintingDef.indicatorRadius ?? null,
     });
     Game.ecs.addComponent(worldRef, "Label", painting, {
       text: paintingDef.label ?? paintingDef.id ?? textureKey,
