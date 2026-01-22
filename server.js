@@ -5,6 +5,7 @@ const express = require("express");
 const WebSocket = require("ws");
 
 const PORT = process.env.PORT || 3000;
+const AUTHORITATIVE = process.env.AUTHORITATIVE === "true";
 
 const app = express();
 app.use(express.static(__dirname));
@@ -101,6 +102,9 @@ function createPlayer(id, name) {
 }
 
 function simulatePlayer(player, dt) {
+  if (!AUTHORITATIVE) {
+    return;
+  }
   player.rotY += player.input.turn * playerTurnSpeed * dt;
 
   const forwardX = Math.sin(player.rotY);
@@ -293,10 +297,40 @@ wss.on("connection", (ws) => {
     }
 
     if (msg.type === "input") {
+      if (!AUTHORITATIVE) {
+        return;
+      }
       player.input.turn = clamp(msg.turn ?? 0, -1, 1);
       player.input.throttle = clamp(msg.throttle ?? 0, -1, 1);
       if (msg.jump) {
         player.input.jump = true;
+      }
+    }
+
+    if (msg.type === "state") {
+      if (AUTHORITATIVE) {
+        return;
+      }
+      if (msg.pos) {
+        player.pos = {
+          x: Number(msg.pos.x) || 0,
+          y: Number(msg.pos.y) || 0,
+          z: Number(msg.pos.z) || 0,
+        };
+      }
+      if (typeof msg.rotY === "number") {
+        player.rotY = msg.rotY;
+      }
+      if (msg.vel) {
+        player.vel = {
+          x: Number(msg.vel.x) || 0,
+          y: Number(msg.vel.y) || 0,
+          z: Number(msg.vel.z) || 0,
+        };
+      }
+      const requested = sanitizeName(msg.name);
+      if (requested) {
+        player.name = requested;
       }
     }
   });

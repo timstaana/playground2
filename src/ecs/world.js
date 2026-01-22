@@ -66,11 +66,11 @@ Game.ecs.createWorld = function createWorld() {
       network: {
         enabled: true,
         connected: false,
-        authoritative: true,
+        authoritative: false,
         id: null,
         name: null,
         socket: null,
-        sendInterval: 0.02,
+        sendInterval: 0.016,
         lastSentAt: 0,
         remoteEntities: new Map(),
         localState: null,

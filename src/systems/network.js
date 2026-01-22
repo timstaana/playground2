@@ -165,6 +165,9 @@ Game.net.applyState = function applyState(worldRef, players) {
     }
     seen.add(state.id);
     if (state.id === net.id) {
+      if (!net.authoritative) {
+        continue;
+      }
       const playerEntity = worldRef.resources.playerId;
       if (playerEntity) {
         Game.net.updatePlayerFromState(worldRef, playerEntity, state, true);
@@ -422,7 +425,25 @@ Game.systems.networkInputSystem = function networkInputSystem(worldRef) {
   };
 
   try {
-    net.socket.send(JSON.stringify(payload));
+    if (net.authoritative) {
+      net.socket.send(JSON.stringify(payload));
+    } else {
+      const playerId = worldRef.resources.playerId;
+      const transform = playerId
+        ? worldRef.components.Transform.get(playerId)
+        : null;
+      const vel = playerId ? worldRef.components.Velocity.get(playerId) : null;
+      if (transform) {
+        const statePayload = {
+          type: "state",
+          pos: transform.pos,
+          rotY: transform.rotY,
+          vel: vel ? { x: vel.x, y: vel.y, z: vel.z } : { x: 0, y: 0, z: 0 },
+          name: net.name,
+        };
+        net.socket.send(JSON.stringify(statePayload));
+      }
+    }
     net.lastSentAt = now;
   } catch (err) {
     console.warn("Failed to send input", err);
