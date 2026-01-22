@@ -35,6 +35,47 @@ Game.systems.applyFocusCamera = function applyFocusCamera(
   );
 };
 
+Game.systems.clampCameraToBlocks = function clampCameraToBlocks(
+  worldRef,
+  from,
+  to
+) {
+  if (!worldRef || !worldRef.resources?.blockSet) {
+    return { x: to.x, y: to.y, z: to.z };
+  }
+  const dir = {
+    x: to.x - from.x,
+    y: to.y - from.y,
+    z: to.z - from.z,
+  };
+  const dist = Math.hypot(dir.x, dir.y, dir.z);
+  if (dist <= 0.0001) {
+    return { x: to.x, y: to.y, z: to.z };
+  }
+  const steps = Math.max(1, Math.ceil(dist / 0.15));
+  let lastSafe = { x: from.x, y: from.y, z: from.z };
+  for (let i = 1; i <= steps; i += 1) {
+    const t = i / steps;
+    const pos = {
+      x: from.x + dir.x * t,
+      y: from.y + dir.y * t,
+      z: from.z + dir.z * t,
+    };
+    if (
+      Game.utils.isBlockAt(
+        worldRef,
+        Math.floor(pos.x),
+        Math.floor(pos.y),
+        Math.floor(pos.z)
+      )
+    ) {
+      return lastSafe;
+    }
+    lastSafe = pos;
+  }
+  return { x: to.x, y: to.y, z: to.z };
+};
+
 Game.systems.cameraSystem = function cameraSystem(worldRef) {
   const cameraId = worldRef.resources.cameraId;
   if (!cameraId) {
@@ -83,6 +124,81 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
       normal,
       distance,
       lightbox.yOffset
+    );
+    worldRef.components.Transform.set(cameraId, cameraTransform);
+    return;
+  }
+
+  const dialogueState = worldRef.components.DialogueState.get(cameraId);
+  if (dialogueState?.mode === "dialogue") {
+    const follow = worldRef.components.CameraFollow.get(cameraId);
+    const rig = worldRef.components.CameraRig.get(cameraId);
+    if (!follow) {
+      return;
+    }
+    const targetTransform = worldRef.components.Transform.get(follow.target);
+    if (!targetTransform) {
+      return;
+    }
+
+    const yaw = rig ? rig.yaw : targetTransform.rotY;
+    const forward = {
+      x: Math.sin(yaw),
+      z: -Math.cos(yaw),
+    };
+    const right = {
+      x: Math.cos(yaw),
+      z: Math.sin(yaw),
+    };
+
+    const zoomDistance = follow.distance * 0.85;
+    const zoomHeight = follow.height * 0.95;
+    const zoomSide = follow.side * 0.9;
+
+    const desired = {
+      x: targetTransform.pos.x - forward.x * zoomDistance + right.x * zoomSide,
+      y: targetTransform.pos.y + zoomHeight,
+      z: targetTransform.pos.z - forward.z * zoomDistance + right.z * zoomSide,
+    };
+    const lookAt = {
+      x: targetTransform.pos.x,
+      y: targetTransform.pos.y + follow.lookHeight,
+      z: targetTransform.pos.z,
+    };
+    const adjusted = Game.systems.clampCameraToBlocks(
+      worldRef,
+      lookAt,
+      desired
+    );
+
+    cameraTransform.pos.x = lerp(
+      cameraTransform.pos.x,
+      adjusted.x,
+      follow.smooth
+    );
+    cameraTransform.pos.y = lerp(
+      cameraTransform.pos.y,
+      adjusted.y,
+      follow.smooth
+    );
+    cameraTransform.pos.z = lerp(
+      cameraTransform.pos.z,
+      adjusted.z,
+      follow.smooth
+    );
+
+    const camWorld = Game.utils.gameToWorld(cameraTransform.pos);
+    const lookWorld = Game.utils.gameToWorld(lookAt);
+    camera(
+      camWorld.x,
+      camWorld.y,
+      camWorld.z,
+      lookWorld.x,
+      lookWorld.y,
+      lookWorld.z,
+      0,
+      1,
+      0
     );
     worldRef.components.Transform.set(cameraId, cameraTransform);
     return;

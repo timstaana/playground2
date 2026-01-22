@@ -192,6 +192,10 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
     if (gl && typeof gl.depthMask === "function") {
       gl.depthMask(true);
     }
+    if (gl && typeof gl.enable === "function") {
+      gl.enable(gl.CULL_FACE);
+      gl.cullFace(gl.FRONT);
+    }
     blendMode(REPLACE);
     spriteDraws.sort((a, b) => b.depth - a.depth);
 
@@ -265,6 +269,9 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
       Game.rendering.clearTexture();
     }
     blendMode(BLEND);
+    if (gl && typeof gl.disable === "function") {
+      gl.disable(gl.CULL_FACE);
+    }
   }
 
   if (Game.debug?.enabled) {
