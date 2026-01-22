@@ -14,10 +14,9 @@
     "occluderAmbient": 0.588
   },
   "interaction": {
-    "dialogueShoulderOffset": 2.5,
-    "dialogueYOffset": 0.8,
-    "range": 1.5,
-    "lightboxDistanceScale": 1.4,
+    "dialogueYOffset": 0,
+    "range": 0.6,
+    "lightboxDistanceScale": 1.95,
     "lightboxDistanceOffset": 0.6,
     "lightboxYOffset": 0
   },
@@ -65,6 +64,9 @@
       "sprite": {
         "width": 1,
         "height": 1.5
+      },
+      "interaction": {
+        "range": 1.5
       }
     }
   ],
