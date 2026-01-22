@@ -435,7 +435,8 @@ Game.systems.drawCharacterLabels = function drawCharacterLabels(
       continue;
     }
 
-    const isPlayer = worldRef.components.Player.has(entity);
+    const isRemote = worldRef.components.RemotePlayer.has(entity);
+    const isPlayer = worldRef.components.Player.has(entity) || isRemote;
     const isNPC = worldRef.components.NPC.has(entity);
     if (!isPlayer && !isNPC) {
       continue;
@@ -507,7 +508,8 @@ Game.systems.drawDebugOverlay = function drawDebugOverlay(
       continue;
     }
 
-    const isPlayer = worldRef.components.Player.has(entity);
+    const isRemote = worldRef.components.RemotePlayer.has(entity);
+    const isPlayer = worldRef.components.Player.has(entity) || isRemote;
     const isNPC = worldRef.components.NPC.has(entity);
     const isPainting = worldRef.components.Painting.has(entity);
 

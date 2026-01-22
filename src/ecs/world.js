@@ -14,6 +14,7 @@ Game.ecs.createWorld = function createWorld() {
       Renderable: new Map(),
       BillboardSprite: new Map(),
       Player: new Map(),
+      RemotePlayer: new Map(),
       NPC: new Map(),
       Painting: new Map(),
       Interaction: new Map(),
@@ -62,6 +63,17 @@ Game.ecs.createWorld = function createWorld() {
         loading: new Map(),
         failed: new Set(),
       },
+      network: {
+        enabled: true,
+        connected: false,
+        authoritative: true,
+        id: null,
+        name: null,
+        socket: null,
+        sendInterval: 0.05,
+        lastSentAt: 0,
+        remoteEntities: new Map(),
+      },
       interactionFocus: {
         targetId: null,
         weight: 0,
@@ -79,4 +91,14 @@ Game.ecs.createEntity = function createEntity(worldRef) {
 Game.ecs.addComponent = function addComponent(worldRef, name, entity, data) {
   worldRef.components[name].set(entity, data);
   return data;
+};
+
+Game.ecs.removeEntity = function removeEntity(worldRef, entity) {
+  if (!worldRef || !worldRef.entities.has(entity)) {
+    return;
+  }
+  worldRef.entities.delete(entity);
+  for (const map of Object.values(worldRef.components)) {
+    map.delete(entity);
+  }
 };

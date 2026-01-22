@@ -68,6 +68,9 @@ async function loadLevel() {
     }
   }
   Game.level.buildLevel(world, levelData || {});
+  if (Game.config?.network?.enabled) {
+    Game.net?.connect?.(world);
+  }
   loading = false;
 }
 
@@ -105,6 +108,7 @@ function touchEnded(event) {
 
 function updateSystems(worldRef, dt) {
   Game.systems.inputSystem(worldRef);
+  Game.systems.networkSystem?.(worldRef, dt);
   Game.systems.interactionSystem(worldRef);
   Game.systems.paintingStreamingSystem?.(worldRef);
   const cameraId = worldRef.resources.cameraId;
@@ -117,11 +121,15 @@ function updateSystems(worldRef, dt) {
   const locked =
     (lightbox && lightbox.mode === "lightbox") ||
     (dialogueState && dialogueState.mode === "dialogue");
+  const net = worldRef.resources.network;
+  const authoritative = net && net.connected && net.authoritative;
   if (!locked) {
     Game.systems.cameraControlSystem(worldRef, dt);
-    Game.systems.movementSystem(worldRef, dt);
-    Game.systems.gravitySystem(worldRef, dt);
-    Game.systems.physicsSystem(worldRef, dt);
+    if (!authoritative) {
+      Game.systems.movementSystem(worldRef, dt);
+      Game.systems.gravitySystem(worldRef, dt);
+      Game.systems.physicsSystem(worldRef, dt);
+    }
   }
   Game.systems.cameraSystem(worldRef);
 }
