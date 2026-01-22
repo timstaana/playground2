@@ -20,6 +20,7 @@ Game.ecs.createWorld = function createWorld() {
       Lightbox: new Map(),
       Dialogue: new Map(),
       DialogueState: new Map(),
+      Highlight: new Map(),
       Label: new Map(),
       Speed: new Map(),
       TurnSpeed: new Map(),

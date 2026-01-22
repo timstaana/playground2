@@ -5,6 +5,10 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
   const inputState = Game.systems.inputState || {};
   const playerId = worldRef.resources.playerId;
   const cameraId = worldRef.resources.cameraId;
+  const highlightMap = worldRef.components.Highlight;
+  if (highlightMap) {
+    highlightMap.clear();
+  }
   if (!playerId) {
     inputState.clickRequested = false;
     return;
@@ -66,10 +70,11 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
     return;
   }
 
-  const nearest = Game.systems.findClosestInteractionTarget(
+  const nearest = Game.systems.scanInteractionTargets(
     worldRef,
     playerTransform,
-    playerCollider
+    playerCollider,
+    highlightMap
   );
 
   if (nearest && (spacePressed || clickRequested)) {
@@ -114,10 +119,11 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
   inputState.clickRequested = false;
 };
 
-Game.systems.findClosestInteractionTarget = function findClosestInteractionTarget(
+Game.systems.scanInteractionTargets = function scanInteractionTargets(
   worldRef,
   playerTransform,
-  playerCollider
+  playerCollider,
+  highlightMap
 ) {
   let closest = null;
   let closestDist = Infinity;
@@ -151,6 +157,44 @@ Game.systems.findClosestInteractionTarget = function findClosestInteractionTarge
 
     const dist = Game.systems.distancePointToAabb(playerCenter, min, max);
     const range = interaction?.range ?? 1.5;
+    if (dist <= range) {
+      const labelData = worldRef.components.Label.get(entity);
+      let highlightColor = null;
+      if (
+        Array.isArray(interaction?.highlightColor) &&
+        interaction.highlightColor.length >= 3
+      ) {
+        highlightColor = interaction.highlightColor;
+      } else if (
+        labelData &&
+        Array.isArray(labelData.color) &&
+        labelData.color.length >= 3
+      ) {
+        highlightColor = labelData.color;
+      } else if (worldRef.components.NPC.has(entity)) {
+        highlightColor = [120, 200, 255];
+      } else if (worldRef.components.Painting.has(entity)) {
+        highlightColor = [255, 120, 200];
+      } else if (worldRef.components.Player.has(entity)) {
+        highlightColor = [255, 220, 80];
+      } else {
+        highlightColor = [255, 200, 120];
+      }
+      const highlightThickness = Math.max(
+        0,
+        interaction?.highlightThickness ??
+          interaction?.outlineThickness ??
+          interaction?.highlightScale ??
+          6
+      );
+      if (highlightMap) {
+        highlightMap.set(entity, {
+          color: highlightColor,
+          thickness: highlightThickness,
+        });
+      }
+    }
+
     if (dist <= range && dist < closestDist) {
       closestDist = dist;
       closest = { entity, dist, interaction: { ...interaction, kind } };

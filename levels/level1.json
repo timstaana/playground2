@@ -59,7 +59,7 @@
         "name": "NPC Test",
         "lines": [
           "Hey there!",
-          "Press space, click, or move to close."
+          "Welcome to the gallery playground test."
         ]
       },
       "sprite": {
@@ -80,7 +80,7 @@
       "image": "assets/art/art_00.jpg",
       "pos": {
         "x": 0,
-        "y": 3,
+        "y": 2,
         "z": 0
       },
       "yaw": 0,

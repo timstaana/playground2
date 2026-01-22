@@ -96,6 +96,14 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
         (center.z - cameraPos.z) * viewDir.z;
 
       if (spriteTex && Game.rendering.isValidTexture(tex)) {
+        const highlight = worldRef.components.Highlight.get(entity);
+        const outline =
+          highlight && Array.isArray(highlight.color)
+            ? {
+                color: highlight.color,
+                thickness: highlight.thickness,
+              }
+            : null;
         spriteDraws.push({
           sprite,
           spriteTex,
@@ -104,6 +112,7 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
           billboardYaw,
           billboardPitch,
           isMoving: shouldAnimate,
+          outline,
           depth,
         });
         continue;
@@ -202,10 +211,44 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
         draw.sprite.idleFrame
       );
       if (renderState?.spriteShader) {
+        const outlineThickness = draw.outline?.thickness ?? 0;
+        const outlineEnabled = outlineThickness > 0;
+        const outlineColor = outlineEnabled
+          ? draw.outline.color || [255, 200, 120]
+          : [0, 0, 0];
+        const texWidth =
+          draw.spriteTex.texture?.width ||
+          draw.spriteTex.source?.width ||
+          1;
+        const texHeight =
+          draw.spriteTex.texture?.height ||
+          draw.spriteTex.source?.height ||
+          1;
+
         renderState.spriteShader.setUniform("uTexture", draw.tex);
         renderState.spriteShader.setUniform(
           "uAlphaCutoff",
           draw.sprite.alphaCutoff ?? 0.4
+        );
+        renderState.spriteShader.setUniform(
+          "uTextureSize",
+          [texWidth, texHeight]
+        );
+        renderState.spriteShader.setUniform(
+          "uEnableOutline",
+          outlineEnabled ? 1 : 0
+        );
+        renderState.spriteShader.setUniform(
+          "uOutlineColor",
+          [
+            outlineColor[0] / 255,
+            outlineColor[1] / 255,
+            outlineColor[2] / 255,
+          ]
+        );
+        renderState.spriteShader.setUniform(
+          "uOutlineThickness",
+          outlineThickness
         );
       } else {
         texture(draw.tex);

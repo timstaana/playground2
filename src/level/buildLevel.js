@@ -208,6 +208,9 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
       Game.ecs.addComponent(worldRef, "Interaction", npc, {
         kind: interactionConfig.kind || interactionConfig.type || "dialogue",
         range: interactionConfig.range ?? interactionDefaults.range,
+        highlightColor: interactionConfig.highlightColor || null,
+        highlightScale: interactionConfig.highlightScale ?? null,
+        highlightThickness: interactionConfig.highlightThickness ?? null,
       });
     }
     const spriteWidth = npcSprite.width ?? defaultSpriteWidth;
@@ -312,6 +315,9 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
       Game.ecs.addComponent(worldRef, "Interaction", painting, {
         kind: interactionConfig.kind || interactionConfig.type || "lightbox",
         range: interactionConfig.range ?? interactionDefaults.range,
+        highlightColor: interactionConfig.highlightColor || null,
+        highlightScale: interactionConfig.highlightScale ?? null,
+        highlightThickness: interactionConfig.highlightThickness ?? null,
       });
     }
     const lightboxData = paintingDef.lightbox;
