@@ -9,16 +9,50 @@ let renderState = null;
 function setup() {
   const canvas = createCanvas(windowWidth, windowHeight, WEBGL);
   frameRate(60);
+
+  // --- iOS Safari: stop selection/callout/drag/scroll/zoom on the canvas ---
+  const el = canvas.elt;
+
+  // CSS
+  el.style.touchAction = "none";              // stop browser gestures
+  el.style.webkitTouchCallout = "none";       // disable iOS callout
+  el.style.webkitUserSelect = "none";         // disable selection
+  el.style.userSelect = "none";
+  el.style.webkitUserDrag = "none";           // disable drag ghost
+  el.style.userDrag = "none";
+  el.style.webkitTapHighlightColor = "transparent";
+
+  // JS (non-passive) – required for iOS
+  const block = (e) => {
+    // If you want pinch zoom inside your game, remove this for multi-touch.
+    e.preventDefault();
+  };
+
+  el.addEventListener("touchstart", block, { passive: false });
+  el.addEventListener("touchmove",  block, { passive: false });
+  el.addEventListener("touchend",   block, { passive: false });
+  el.addEventListener("touchcancel",block, { passive: false });
+
+  // Long-press context menu / callout fallback
+  el.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  // Optional: prevent page scroll/bounce if a finger starts on canvas
+  document.body.style.overscrollBehavior = "none";
+  document.documentElement.style.overscrollBehavior = "none";
+  // ------------------------------------------------------------------------
+
   renderState = {
     spriteShader: Game.rendering.createSpriteShader(),
     occluderShader: Game.rendering.createOccluderShader(),
     uiFont: null,
   };
+
   Game.ui?.ensureOverlay?.();
-  Game.systems.attachTouchEvents?.(canvas?.elt);
+  Game.systems.attachTouchEvents?.(el);
 
   loadLevel();
 }
+
 
 function draw() {
   const dt = Math.min(0.033, deltaTime / 1000);
