@@ -3,6 +3,9 @@ Game.systems = Game.systems || {};
 
 Game.systems.physicsSystem = function physicsSystem(worldRef, dt) {
   for (const [entity, transform] of worldRef.components.Transform.entries()) {
+    if (worldRef.components.RemotePlayer?.has(entity)) {
+      continue;
+    }
     const vel = worldRef.components.Velocity.get(entity);
     const collider = worldRef.components.Collider.get(entity);
     if (!vel || !collider) {

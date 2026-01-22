@@ -37,7 +37,7 @@ for (const block of level.blocks || []) {
 const players = new Map();
 let nextPlayerId = 1;
 
-const TICK_RATE = 30;
+const TICK_RATE = Number(process.env.TICK_RATE) || 60;
 const TICK_DT = 1 / TICK_RATE;
 
 function blockKey(x, y, z) {

@@ -108,8 +108,8 @@ function touchEnded(event) {
 
 function updateSystems(worldRef, dt) {
   Game.systems.inputSystem(worldRef);
-  Game.systems.networkSystem?.(worldRef, dt);
   Game.systems.interactionSystem(worldRef);
+  Game.systems.networkInputSystem?.(worldRef);
   Game.systems.paintingStreamingSystem?.(worldRef);
   const cameraId = worldRef.resources.cameraId;
   const lightbox = cameraId
@@ -121,16 +121,13 @@ function updateSystems(worldRef, dt) {
   const locked =
     (lightbox && lightbox.mode === "lightbox") ||
     (dialogueState && dialogueState.mode === "dialogue");
-  const net = worldRef.resources.network;
-  const authoritative = net && net.connected && net.authoritative;
   if (!locked) {
     Game.systems.cameraControlSystem(worldRef, dt);
-    if (!authoritative) {
-      Game.systems.movementSystem(worldRef, dt);
-      Game.systems.gravitySystem(worldRef, dt);
-      Game.systems.physicsSystem(worldRef, dt);
-    }
+    Game.systems.movementSystem(worldRef, dt);
+    Game.systems.gravitySystem(worldRef, dt);
+    Game.systems.physicsSystem(worldRef, dt);
   }
+  Game.systems.networkSmoothingSystem?.(worldRef, dt);
   Game.systems.cameraSystem(worldRef);
 }
 

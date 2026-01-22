@@ -29,6 +29,40 @@ Game.net.getDefaultName = function getDefaultName(worldRef) {
   return `player-${suffix}`;
 };
 
+Game.net.lerp = function lerp(a, b, t) {
+  return a + (b - a) * t;
+};
+
+Game.net.lerpAngle = function lerpAngle(a, b, t) {
+  const twoPi = Math.PI * 2;
+  let diff = (b - a) % twoPi;
+  if (diff > Math.PI) {
+    diff -= twoPi;
+  } else if (diff < -Math.PI) {
+    diff += twoPi;
+  }
+  return a + diff * t;
+};
+
+Game.net.lerpFactor = function lerpFactor(base, dt) {
+  if (!dt || dt <= 0) {
+    return base;
+  }
+  const scaled = Math.max(0, dt * 60);
+  return 1 - Math.pow(1 - base, scaled);
+};
+
+Game.net.normalizeState = function normalizeState(state, fallback) {
+  const pos = state.pos || fallback?.pos || { x: 0, y: 0, z: 0 };
+  const vel = state.vel || fallback?.vel || { x: 0, y: 0, z: 0 };
+  return {
+    pos: { x: pos.x ?? 0, y: pos.y ?? 0, z: pos.z ?? 0 },
+    rotY: typeof state.rotY === "number" ? state.rotY : fallback?.rotY ?? 0,
+    vel: { x: vel.x ?? 0, y: vel.y ?? 0, z: vel.z ?? 0 },
+    name: state.name ?? fallback?.name ?? null,
+  };
+};
+
 Game.net.connect = function connect(worldRef, options = {}) {
   if (!worldRef) {
     return;
@@ -50,6 +84,7 @@ Game.net.connect = function connect(worldRef, options = {}) {
     options.sendInterval ?? Game.config.network?.sendInterval ?? net.sendInterval;
   net.name = options.name || net.name || Game.net.getDefaultName(worldRef);
   net.remoteEntities = net.remoteEntities || new Map();
+  net.localState = null;
 
   const socket = new WebSocket(url);
   net.socket = socket;
@@ -76,6 +111,7 @@ Game.net.connect = function connect(worldRef, options = {}) {
     net.connected = false;
     net.socket = null;
     net.id = null;
+    net.localState = null;
     Game.net.clearRemotePlayers(worldRef);
   });
 
@@ -154,6 +190,7 @@ Game.net.ensureRemotePlayer = function ensureRemotePlayer(worldRef, state) {
   }
 
   const entity = Game.ecs.createEntity(worldRef);
+  const normalized = Game.net.normalizeState(state, null);
   const localPlayer = worldRef.resources.playerId;
   const baseCollider = localPlayer
     ? worldRef.components.Collider.get(localPlayer)
@@ -166,13 +203,13 @@ Game.net.ensureRemotePlayer = function ensureRemotePlayer(worldRef, state) {
     : null;
 
   Game.ecs.addComponent(worldRef, "Transform", entity, {
-    pos: { x: state.pos?.x ?? 0, y: state.pos?.y ?? 1, z: state.pos?.z ?? 0 },
-    rotY: state.rotY ?? 0,
+    pos: { ...normalized.pos },
+    rotY: normalized.rotY,
   });
   Game.ecs.addComponent(worldRef, "Velocity", entity, {
-    x: state.vel?.x ?? 0,
-    y: state.vel?.y ?? 0,
-    z: state.vel?.z ?? 0,
+    x: normalized.vel.x,
+    y: normalized.vel.y,
+    z: normalized.vel.z,
   });
   Game.ecs.addComponent(worldRef, "Collider", entity, {
     w: baseCollider?.w ?? 1,
@@ -197,12 +234,14 @@ Game.net.ensureRemotePlayer = function ensureRemotePlayer(worldRef, state) {
     ...(baseSprite || spriteFallback),
   });
   Game.ecs.addComponent(worldRef, "Label", entity, {
-    text: state.name || state.id,
+    text: normalized.name || state.id,
     color: null,
     offsetY: 0.1,
   });
   Game.ecs.addComponent(worldRef, "RemotePlayer", entity, {
     id: state.id,
+    target: normalized,
+    lastSeen: typeof performance !== "undefined" ? performance.now() : Date.now(),
   });
 
   net.remoteEntities.set(state.id, entity);
@@ -215,40 +254,51 @@ Game.net.updatePlayerFromState = function updatePlayerFromState(
   state,
   isLocal
 ) {
+  const net = worldRef.resources.network;
   const transform = worldRef.components.Transform.get(entity);
-  if (transform && state.pos) {
-    transform.pos = {
-      x: state.pos.x ?? transform.pos.x,
-      y: state.pos.y ?? transform.pos.y,
-      z: state.pos.z ?? transform.pos.z,
-    };
-    if (typeof state.rotY === "number") {
-      transform.rotY = state.rotY;
-    }
-    worldRef.components.Transform.set(entity, transform);
-  }
-
   const vel = worldRef.components.Velocity.get(entity);
-  if (vel && state.vel) {
-    vel.x = state.vel.x ?? 0;
-    vel.y = state.vel.y ?? 0;
-    vel.z = state.vel.z ?? 0;
-    worldRef.components.Velocity.set(entity, vel);
+  const fallback = {
+    pos: transform?.pos,
+    rotY: transform?.rotY,
+    vel: vel ? { x: vel.x, y: vel.y, z: vel.z } : null,
+    name: state?.name ?? null,
+  };
+  const normalized = Game.net.normalizeState(state, fallback);
+
+  if (isLocal) {
+    if (net) {
+      net.localState = normalized;
+    }
+  } else {
+    const remote = worldRef.components.RemotePlayer.get(entity);
+    if (remote) {
+      if (!remote.target && transform) {
+        transform.pos = { ...normalized.pos };
+        transform.rotY = normalized.rotY;
+        worldRef.components.Transform.set(entity, transform);
+      }
+      if (!remote.target && vel) {
+        vel.x = normalized.vel.x;
+        vel.y = normalized.vel.y;
+        vel.z = normalized.vel.z;
+        worldRef.components.Velocity.set(entity, vel);
+      }
+      remote.target = normalized;
+      remote.lastSeen = typeof performance !== "undefined" ? performance.now() : Date.now();
+      worldRef.components.RemotePlayer.set(entity, remote);
+    }
   }
 
-  if (state.name) {
+  if (normalized.name) {
     const label = worldRef.components.Label.get(entity);
     if (label) {
-      label.text = state.name;
+      label.text = normalized.name;
       worldRef.components.Label.set(entity, label);
     }
   }
 
-  if (isLocal && state.name) {
-    const net = worldRef.resources.network;
-    if (net && state.name !== net.name) {
-      net.name = state.name;
-    }
+  if (isLocal && normalized.name && net && normalized.name !== net.name) {
+    net.name = normalized.name;
   }
 };
 
@@ -263,7 +313,90 @@ Game.net.clearRemotePlayers = function clearRemotePlayers(worldRef) {
   net.remoteEntities.clear();
 };
 
-Game.systems.networkSystem = function networkSystem(worldRef) {
+Game.net.stepSmoothing = function stepSmoothing(worldRef, dt) {
+  const net = worldRef.resources.network;
+  if (!net || !net.connected) {
+    return;
+  }
+  const smoothing = net.smoothing || {};
+  const localLerp = Game.net.lerpFactor(smoothing.local ?? 0.35, dt);
+  const localRotLerp = Game.net.lerpFactor(smoothing.localRot ?? 0.35, dt);
+  const localVelLerp = Game.net.lerpFactor(smoothing.localVel ?? 0.35, dt);
+  const remoteLerp = Game.net.lerpFactor(smoothing.remote ?? 0.2, dt);
+  const remoteRotLerp = Game.net.lerpFactor(smoothing.remoteRot ?? 0.25, dt);
+  const remoteVelLerp = Game.net.lerpFactor(smoothing.remoteVel ?? 0.2, dt);
+  const snapDistance = smoothing.snapDistance ?? 0.75;
+
+  if (net.authoritative && net.localState) {
+    const playerId = worldRef.resources.playerId;
+    const transform = playerId
+      ? worldRef.components.Transform.get(playerId)
+      : null;
+    const vel = playerId ? worldRef.components.Velocity.get(playerId) : null;
+    if (transform) {
+      const target = net.localState;
+      const dx = target.pos.x - transform.pos.x;
+      const dy = target.pos.y - transform.pos.y;
+      const dz = target.pos.z - transform.pos.z;
+      const dist = Math.hypot(dx, dy, dz);
+      if (dist > snapDistance) {
+        transform.pos = { ...target.pos };
+      } else {
+        transform.pos.x += dx * localLerp;
+        transform.pos.y += dy * localLerp;
+        transform.pos.z += dz * localLerp;
+      }
+      transform.rotY = Game.net.lerpAngle(
+        transform.rotY,
+        target.rotY ?? transform.rotY,
+        localRotLerp
+      );
+      worldRef.components.Transform.set(playerId, transform);
+    }
+    if (vel && net.localState.vel) {
+      vel.x = Game.net.lerp(vel.x, net.localState.vel.x, localVelLerp);
+      vel.y = Game.net.lerp(vel.y, net.localState.vel.y, localVelLerp);
+      vel.z = Game.net.lerp(vel.z, net.localState.vel.z, localVelLerp);
+      worldRef.components.Velocity.set(playerId, vel);
+    }
+  }
+
+  for (const [entity, remote] of worldRef.components.RemotePlayer.entries()) {
+    const target = remote?.target;
+    if (!target || !target.pos) {
+      continue;
+    }
+    const transform = worldRef.components.Transform.get(entity);
+    const vel = worldRef.components.Velocity.get(entity);
+    if (transform) {
+      const dx = target.pos.x - transform.pos.x;
+      const dy = target.pos.y - transform.pos.y;
+      const dz = target.pos.z - transform.pos.z;
+      const dist = Math.hypot(dx, dy, dz);
+      if (dist > snapDistance) {
+        transform.pos = { ...target.pos };
+      } else {
+        transform.pos.x += dx * remoteLerp;
+        transform.pos.y += dy * remoteLerp;
+        transform.pos.z += dz * remoteLerp;
+      }
+      transform.rotY = Game.net.lerpAngle(
+        transform.rotY,
+        target.rotY ?? transform.rotY,
+        remoteRotLerp
+      );
+      worldRef.components.Transform.set(entity, transform);
+    }
+    if (vel && target.vel) {
+      vel.x = Game.net.lerp(vel.x, target.vel.x, remoteVelLerp);
+      vel.y = Game.net.lerp(vel.y, target.vel.y, remoteVelLerp);
+      vel.z = Game.net.lerp(vel.z, target.vel.z, remoteVelLerp);
+      worldRef.components.Velocity.set(entity, vel);
+    }
+  }
+};
+
+Game.systems.networkInputSystem = function networkInputSystem(worldRef) {
   const net = worldRef.resources.network;
   if (!net || !net.connected || !net.socket) {
     return;
@@ -294,9 +427,11 @@ Game.systems.networkSystem = function networkSystem(worldRef) {
   } catch (err) {
     console.warn("Failed to send input", err);
   }
+};
 
-  if (move.jumpRequested) {
-    move.jumpRequested = false;
-    worldRef.components.MoveIntent.set(playerId, move);
-  }
+Game.systems.networkSmoothingSystem = function networkSmoothingSystem(
+  worldRef,
+  dt
+) {
+  Game.net.stepSmoothing(worldRef, dt);
 };

@@ -4,7 +4,7 @@ Game.config = {
   network: {
     enabled: true,
     url: null,
-    sendInterval: 0.05,
+    sendInterval: 0.02,
     authoritative: true,
   },
 };
