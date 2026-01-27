@@ -53,6 +53,7 @@ function setup() {
 
   Game.ui?.ensureOverlay?.();
   Game.systems.attachTouchEvents?.(el);
+  Game.systems.attachDebugCameraMouseEvents?.(el);
 
   loadLevel();
 }
@@ -135,20 +136,61 @@ async function loadLevel() {
   }
 }
 
-function keyPressed() {
+function keyPressed(event) {
+  let handled = false;
   if (key === "`" || keyCode === 192) {
-    Game.debug.enabled = !Game.debug.enabled;
+    const debug = Game.debug || {};
+    const maxMode =
+      typeof debug.maxMode === "number" && debug.maxMode > 0
+        ? debug.maxMode
+        : 2;
+    debug.mode = ((debug.mode ?? 0) + 1) % (maxMode + 1);
+    Game.debug = debug;
+    const input = Game.systems?.inputState?.debugCamera;
+    if (input) {
+      input.rightDragging = false;
+      input.lookDeltaX = 0;
+      input.lookDeltaY = 0;
+    }
+    handled = true;
+  } else if (key === "Backspace" || keyCode === 8) {
+    if (Game.systems?.deleteSelectedEditorBlock?.(world)) {
+      handled = true;
+    }
+  }
+  if (handled) {
+    if (event?.preventDefault) {
+      event.preventDefault();
+    }
+    return false;
   }
 }
 
 function mousePressed() {
+  if (mouseButton === RIGHT) {
+    return;
+  }
   if (Game.systems?.inputState) {
     const lastTouchTime = Game.systems.inputState.lastTouchTime || 0;
     if (Date.now() - lastTouchTime < 300) {
       return;
     }
+    Game.systems.inputState.mouseDown = true;
+    Game.systems.inputState.mouseDownButton = mouseButton;
+    Game.systems.inputState.mouseDownPosition = { x: mouseX, y: mouseY };
+    Game.systems.inputState.mouseDownTime = Date.now();
     Game.systems.inputState.clickRequested = true;
     Game.systems.inputState.clickPosition = { x: mouseX, y: mouseY };
+  }
+}
+
+function mouseReleased() {
+  if (mouseButton === RIGHT) {
+    return;
+  }
+  if (Game.systems?.inputState) {
+    Game.systems.inputState.mouseDown = false;
+    Game.systems.inputState.mouseDownButton = null;
   }
 }
 
@@ -169,6 +211,8 @@ function touchEnded(event) {
 
 function updateSystems(worldRef, dt) {
   Game.systems.inputSystem(worldRef);
+  Game.systems.editorSystem?.(worldRef);
+  Game.systems.debugCameraControlSystem?.(worldRef, dt);
   Game.systems.interactionSystem(worldRef);
   Game.systems.networkInputSystem?.(worldRef);
   Game.systems.paintingStreamingSystem?.(worldRef);

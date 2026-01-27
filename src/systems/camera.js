@@ -105,6 +105,24 @@ Game.systems.setCameraState = function setCameraState(
   };
 };
 
+Game.systems.applyCameraPerspective =
+  function applyCameraPerspective(worldRef) {
+    if (!worldRef || !worldRef.resources) {
+      return;
+    }
+    const aspect =
+      typeof width === "number" && typeof height === "number" && height > 0
+        ? width / height
+        : 1;
+    const cameraState = worldRef.resources.cameraState;
+    const fov = cameraState?.fov ?? Math.PI / 3;
+    const near = cameraState?.near ?? 0.1;
+    const far = cameraState?.far ?? 10000;
+    if (typeof perspective === "function") {
+      perspective(fov, aspect, near, far);
+    }
+  };
+
 Game.systems.cameraSystem = function cameraSystem(worldRef) {
   const cameraId = worldRef.resources.cameraId;
   if (!cameraId) {
@@ -113,6 +131,49 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
   const cameraTransform = worldRef.components.Transform.get(cameraId);
   if (!cameraTransform) {
     return;
+  }
+
+  Game.systems.applyCameraPerspective(worldRef);
+
+  const debugMode = Game.debug?.mode ?? 0;
+  if (debugMode === 2) {
+    const debugCam = worldRef.resources?.debugCamera;
+    if (debugCam && debugCam.pos) {
+      const yaw = debugCam.yaw ?? 0;
+      const pitch = debugCam.pitch ?? 0;
+      const cosPitch = Math.cos(pitch);
+      const lookDir = {
+        x: Math.sin(yaw) * cosPitch,
+        y: Math.sin(pitch),
+        z: -Math.cos(yaw) * cosPitch,
+      };
+      const pos = debugCam.pos;
+      const lookAt = {
+        x: pos.x + lookDir.x,
+        y: pos.y + lookDir.y,
+        z: pos.z + lookDir.z,
+      };
+
+      cameraTransform.pos.x = pos.x;
+      cameraTransform.pos.y = pos.y;
+      cameraTransform.pos.z = pos.z;
+      const camWorld = Game.utils.gameToWorld(pos);
+      const lookWorld = Game.utils.gameToWorld(lookAt);
+      camera(
+        camWorld.x,
+        camWorld.y,
+        camWorld.z,
+        lookWorld.x,
+        lookWorld.y,
+        lookWorld.z,
+        0,
+        1,
+        0
+      );
+      Game.systems.setCameraState(worldRef, pos, lookAt);
+      worldRef.components.Transform.set(cameraId, cameraTransform);
+      return;
+    }
   }
 
   const lightbox = worldRef.components.Lightbox.get(cameraId);

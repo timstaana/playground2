@@ -299,9 +299,13 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
     }
   }
 
+  Game.systems.drawEditorSelection?.(worldRef);
+  Game.systems.drawEditorHover?.(worldRef);
+  Game.systems.drawEditorRay?.(worldRef);
+
   Game.systems.drawPaintingLoadingIndicators(worldRef, cameraWorld, renderState);
 
-  if (Game.debug?.enabled) {
+  if (Game.debug?.mode === 1) {
     Game.systems.drawDebugOverlay(worldRef, cameraWorld, renderState);
   } else {
     Game.systems.drawCharacterLabels(worldRef, cameraWorld, renderState);

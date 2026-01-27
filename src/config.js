@@ -10,5 +10,6 @@ Game.config = {
 };
 
 Game.debug = {
-  enabled: false,
+  mode: 0,
+  maxMode: 2,
 };

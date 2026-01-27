@@ -67,6 +67,9 @@ Game.systems.handleTouchStart = function handleTouchStart(event) {
   const touchState = Game.systems.ensureTouchState();
   const now = Date.now();
   if (event && typeof event.pointerId === "number") {
+    if (event.pointerType === "mouse") {
+      return false;
+    }
     state.pointerActive = true;
     state.lastPointerTime = now;
   } else if (state.pointerActive && now - state.lastPointerTime < 120) {
@@ -117,6 +120,9 @@ Game.systems.handleTouchMove = function handleTouchMove(event) {
   const touchState = Game.systems.ensureTouchState();
   const now = Date.now();
   if (event && typeof event.pointerId === "number") {
+    if (event.pointerType === "mouse") {
+      return false;
+    }
     state.pointerActive = true;
     state.lastPointerTime = now;
   } else if (state.pointerActive && now - state.lastPointerTime < 120) {
@@ -165,6 +171,9 @@ Game.systems.handleTouchEnd = function handleTouchEnd(event) {
   const touchState = Game.systems.ensureTouchState();
   const now = Date.now();
   if (event && typeof event.pointerId === "number") {
+    if (event.pointerType === "mouse") {
+      return false;
+    }
     state.pointerActive = true;
     state.lastPointerTime = now;
   } else if (state.pointerActive && now - state.lastPointerTime < 120) {

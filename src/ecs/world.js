@@ -45,6 +45,15 @@ Game.ecs.createWorld = function createWorld() {
         fov: Math.PI / 3,
         aspect: 1,
       },
+      debugCamera: {
+        active: false,
+        pos: { x: 0, y: 0, z: 0 },
+        yaw: 0,
+        pitch: 0,
+        speed: 6,
+        sensitivity: 0.004,
+        maxPitch: Math.PI * 0.495,
+      },
       rendering: {
         occluderAlpha: 0.35,
         occluderDitherScale: 1,

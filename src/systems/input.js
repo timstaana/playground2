@@ -6,11 +6,22 @@ Game.systems.inputState = {
   spacePressed: false,
   clickRequested: false,
   clickPosition: null,
+  mouseDown: false,
+  mouseDownButton: null,
+  mouseDownPosition: { x: 0, y: 0 },
+  mouseDownTime: 0,
   touchJumpQueued: false,
   touchJumpPressed: false,
   lastTouchTime: 0,
   lastPointerTime: 0,
   pointerActive: false,
+  debugCamera: {
+    rightDragging: false,
+    lastX: 0,
+    lastY: 0,
+    lookDeltaX: 0,
+    lookDeltaY: 0,
+  },
   touch: {
     active: false,
     id: null,
@@ -86,3 +97,60 @@ Game.systems.inputSystem = function inputSystem(worldRef) {
     worldRef.components.MoveIntent.set(entity, move);
   }
 };
+
+Game.systems.attachDebugCameraMouseEvents =
+  function attachDebugCameraMouseEvents(element) {
+    if (!element || element.__debugMouseEventsAttached) {
+      return;
+    }
+    element.__debugMouseEventsAttached = true;
+
+    const getInput = () => Game.systems?.inputState?.debugCamera;
+    const stopDrag = () => {
+      const input = getInput();
+      if (input) {
+        input.rightDragging = false;
+      }
+    };
+
+    element.addEventListener("mousedown", (event) => {
+      if (event.button !== 2 || Game.debug?.mode !== 2) {
+        return;
+      }
+      const input = getInput();
+      if (!input) {
+        return;
+      }
+      input.rightDragging = true;
+      input.lastX = event.clientX;
+      input.lastY = event.clientY;
+    });
+
+    element.addEventListener("mousemove", (event) => {
+      const input = getInput();
+      if (!input || !input.rightDragging) {
+        return;
+      }
+      if (Game.debug?.mode !== 2 || (event.buttons & 2) === 0) {
+        stopDrag();
+        return;
+      }
+      const dx = event.clientX - input.lastX;
+      const dy = event.clientY - input.lastY;
+      input.lastX = event.clientX;
+      input.lastY = event.clientY;
+      input.lookDeltaX += dx;
+      input.lookDeltaY += dy;
+    });
+
+    element.addEventListener("mouseup", (event) => {
+      if (event.button !== 2) {
+        return;
+      }
+      stopDrag();
+    });
+
+    element.addEventListener("mouseleave", () => {
+      stopDrag();
+    });
+  };
