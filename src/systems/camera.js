@@ -85,6 +85,87 @@ Game.systems.clampCameraToBlocks = function clampCameraToBlocks(
   return { x: to.x, y: to.y, z: to.z };
 };
 
+Game.systems.isCameraPathClear = function isCameraPathClear(
+  worldRef,
+  from,
+  to
+) {
+  if (!worldRef || !worldRef.resources?.blockSet) {
+    return true;
+  }
+  const clamped = Game.systems.clampCameraToBlocks(worldRef, from, to);
+  const dx = clamped.x - to.x;
+  const dy = clamped.y - to.y;
+  const dz = clamped.z - to.z;
+  return dx * dx + dy * dy + dz * dz < 1e-4;
+};
+
+Game.systems.getCameraAvoidedPosition = function getCameraAvoidedPosition(
+  worldRef,
+  lookAt,
+  desired,
+  follow,
+  rig
+) {
+  if (!worldRef || !lookAt || !desired) {
+    return { pos: desired, offsetY: 0 };
+  }
+  const avoidStep = follow?.avoidStep ?? 0.6;
+  const avoidMax = follow?.avoidMax ?? 3;
+  const preferUp =
+    typeof follow?.avoidPreferUp === "boolean" ? follow.avoidPreferUp : true;
+  const minY =
+    typeof follow?.avoidMinY === "number" ? follow.avoidMinY : null;
+  const maxY =
+    typeof follow?.avoidMaxY === "number" ? follow.avoidMaxY : null;
+
+  if (!avoidStep || avoidStep <= 0 || !avoidMax || avoidMax <= 0) {
+    return { pos: desired, offsetY: 0 };
+  }
+
+  if (Game.systems.isCameraPathClear(worldRef, lookAt, desired)) {
+    return { pos: desired, offsetY: 0 };
+  }
+
+  const tryOffset = (offset) => {
+    const candidate = {
+      x: desired.x,
+      y: desired.y + offset,
+      z: desired.z,
+    };
+    if (minY !== null && candidate.y < minY) {
+      return null;
+    }
+    if (maxY !== null && candidate.y > maxY) {
+      return null;
+    }
+    if (Game.systems.isCameraPathClear(worldRef, lookAt, candidate)) {
+      return candidate;
+    }
+    return null;
+  };
+
+  const currentOffset = rig?.avoidOffsetY ?? 0;
+  if (currentOffset) {
+    const candidate = tryOffset(currentOffset);
+    if (candidate) {
+      return { pos: candidate, offsetY: currentOffset };
+    }
+  }
+
+  const order = preferUp ? [1, -1] : [-1, 1];
+  for (let offset = avoidStep; offset <= avoidMax + 1e-4; offset += avoidStep) {
+    for (const dir of order) {
+      const candidate = tryOffset(dir * offset);
+      if (candidate) {
+        return { pos: candidate, offsetY: dir * offset };
+      }
+    }
+  }
+
+  return { pos: desired, offsetY: 0 };
+};
+
 Game.systems.setCameraState = function setCameraState(
   worldRef,
   pos,
@@ -473,23 +554,6 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
       z: targetTransform.pos.z - forward.z * blendDistance + right.z * blendSide,
     };
 
-    activeCameraTransform.pos.x = lerp(
-      activeCameraTransform.pos.x,
-      desired.x,
-      follow.smooth
-    );
-    activeCameraTransform.pos.y = lerp(
-      activeCameraTransform.pos.y,
-      desired.y,
-      follow.smooth
-    );
-    activeCameraTransform.pos.z = lerp(
-      activeCameraTransform.pos.z,
-      desired.z,
-      follow.smooth
-    );
-
-    const camWorld = Game.utils.gameToWorld(activeCameraTransform.pos);
     const baseLookHeight = follow.lookHeight ?? 0;
     const offsetSmooth = Math.min(0.25, Math.max(0.05, follow.smooth ?? 0.15));
     let lookOffset = 0;
@@ -562,8 +626,38 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
         z: lerp(rig.lookAt.z, lookAt.z, lookSmooth),
       };
       lookAt = rig.lookAt;
+    }
+
+    const avoidResult = Game.systems.getCameraAvoidedPosition(
+      worldRef,
+      lookAt,
+      desired,
+      follow,
+      rig
+    );
+    const adjusted = avoidResult?.pos || desired;
+    if (rig) {
+      rig.avoidOffsetY = avoidResult?.offsetY ?? 0;
       worldRef.components.CameraRig.set(entity, rig);
     }
+
+    activeCameraTransform.pos.x = lerp(
+      activeCameraTransform.pos.x,
+      adjusted.x,
+      follow.smooth
+    );
+    activeCameraTransform.pos.y = lerp(
+      activeCameraTransform.pos.y,
+      adjusted.y,
+      follow.smooth
+    );
+    activeCameraTransform.pos.z = lerp(
+      activeCameraTransform.pos.z,
+      adjusted.z,
+      follow.smooth
+    );
+
+    const camWorld = Game.utils.gameToWorld(activeCameraTransform.pos);
     const lookWorld = Game.utils.gameToWorld(lookAt);
 
     camera(

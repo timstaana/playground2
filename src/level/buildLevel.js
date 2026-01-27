@@ -449,6 +449,16 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     lookHeight: cameraDef.lookHeight ?? 1,
     side: cameraDef.side ?? 0,
     smooth: cameraDef.smooth ?? 0.15,
+    avoidStep: cameraDef.avoidStep ?? 0.6,
+    avoidMax: cameraDef.avoidMax ?? 3,
+    avoidPreferUp:
+      typeof cameraDef.avoidPreferUp === "boolean"
+        ? cameraDef.avoidPreferUp
+        : true,
+    avoidMinY:
+      typeof cameraDef.avoidMinY === "number" ? cameraDef.avoidMinY : null,
+    avoidMaxY:
+      typeof cameraDef.avoidMaxY === "number" ? cameraDef.avoidMaxY : null,
   });
   const initialLookHeight = cameraDef.lookHeight ?? 1;
   Game.ecs.addComponent(worldRef, "CameraRig", cameraEntity, {
@@ -458,6 +468,7 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     focusBlend: 0,
     dialogueTargetId: null,
     facingDir: 1,
+    avoidOffsetY: 0,
     lookAt: {
       x: spawn.x,
       y: spawn.y + initialLookHeight,
