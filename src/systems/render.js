@@ -2,9 +2,293 @@ window.Game = window.Game || {};
 Game.systems = Game.systems || {};
 Game.rendering = Game.rendering || {};
 
+Game.rendering.blockChunkKey = function blockChunkKey(cx, cy, cz) {
+  return `${cx}|${cy}|${cz}`;
+};
+
+Game.rendering.getChunkCoordsForCell = function getChunkCoordsForCell(
+  x,
+  y,
+  z,
+  chunkSize
+) {
+  const size = typeof chunkSize === "number" && chunkSize > 0 ? chunkSize : 16;
+  return {
+    cx: Math.floor(x / size),
+    cy: Math.floor(y / size),
+    cz: Math.floor(z / size),
+  };
+};
+
+Game.rendering.ensureBlockChunk = function ensureBlockChunk(
+  worldRef,
+  cx,
+  cy,
+  cz,
+  chunkSize
+) {
+  if (!worldRef?.resources?.rendering) {
+    return null;
+  }
+  const rendering = worldRef.resources.rendering;
+  if (!rendering.blockChunks) {
+    rendering.blockChunks = new Map();
+  }
+  const key = Game.rendering.blockChunkKey(cx, cy, cz);
+  let chunk = rendering.blockChunks.get(key);
+  if (!chunk) {
+    const size = typeof chunkSize === "number" && chunkSize > 0 ? chunkSize : 16;
+    const half = (size - 1) / 2;
+    chunk = {
+      key,
+      cx,
+      cy,
+      cz,
+      center: {
+        x: cx * size + half + 0.5,
+        y: cy * size + half + 0.5,
+        z: cz * size + half + 0.5,
+      },
+      radius: Math.sqrt(3) * half,
+      dirty: true,
+      blockCount: 0,
+      faceCount: 0,
+      shapes: null,
+    };
+    rendering.blockChunks.set(key, chunk);
+  }
+  return chunk;
+};
+
+Game.rendering.markBlockChunkDirtyAround =
+  function markBlockChunkDirtyAround(worldRef, x, y, z) {
+    if (!worldRef?.resources?.rendering) {
+      return;
+    }
+    const rendering = worldRef.resources.rendering;
+    const chunkSize = rendering.blockChunkSize ?? 16;
+    const offsets = [
+      [0, 0, 0],
+      [1, 0, 0],
+      [-1, 0, 0],
+      [0, 1, 0],
+      [0, -1, 0],
+      [0, 0, 1],
+      [0, 0, -1],
+    ];
+    for (const [ox, oy, oz] of offsets) {
+      const cx = x + ox;
+      const cy = y + oy;
+      const cz = z + oz;
+      const coords = Game.rendering.getChunkCoordsForCell(
+        cx,
+        cy,
+        cz,
+        chunkSize
+      );
+      const chunk = Game.rendering.ensureBlockChunk(
+        worldRef,
+        coords.cx,
+        coords.cy,
+        coords.cz,
+        chunkSize
+      );
+      if (chunk) {
+        chunk.dirty = true;
+      }
+    }
+  };
+
+Game.rendering.rebuildAllBlockChunks =
+  function rebuildAllBlockChunks(worldRef) {
+    if (!worldRef?.resources?.rendering) {
+      return;
+    }
+    const rendering = worldRef.resources.rendering;
+    const chunkSize = rendering.blockChunkSize ?? 16;
+    rendering.blockChunks = new Map();
+    if (!worldRef.resources?.blockSet) {
+      return;
+    }
+    for (const key of worldRef.resources.blockSet.values()) {
+      const parts = key.split("|");
+      if (parts.length < 3) {
+        continue;
+      }
+      const x = Number(parts[0]);
+      const y = Number(parts[1]);
+      const z = Number(parts[2]);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+        continue;
+      }
+      const coords = Game.rendering.getChunkCoordsForCell(x, y, z, chunkSize);
+      Game.rendering.ensureBlockChunk(
+        worldRef,
+        coords.cx,
+        coords.cy,
+        coords.cz,
+        chunkSize
+      );
+    }
+    for (const chunk of rendering.blockChunks.values()) {
+      Game.rendering.rebuildBlockChunk(worldRef, chunk, chunkSize);
+    }
+  };
+
+Game.rendering.rebuildBlockChunk = function rebuildBlockChunk(
+  worldRef,
+  chunk,
+  chunkSize
+) {
+  if (!worldRef || !chunk) {
+    return false;
+  }
+  const size = typeof chunkSize === "number" && chunkSize > 0 ? chunkSize : 16;
+  const minX = chunk.cx * size;
+  const minY = chunk.cy * size;
+  const minZ = chunk.cz * size;
+  const maxX = minX + size - 1;
+  const maxY = minY + size - 1;
+  const maxZ = minZ + size - 1;
+  const grid = Game.config.gridSize;
+  const blockIndex = worldRef.resources?.blockIndex || null;
+  const shapes = new Map();
+  let blockCount = 0;
+  let faceCount = 0;
+  const canBuildGeometry =
+    typeof buildGeometry === "function" && typeof model === "function";
+
+  const ensureEntry = (color) => {
+    const key = `${color[0]},${color[1]},${color[2]}`;
+    let entry = shapes.get(key);
+    if (!entry) {
+      entry = { mode: "data", color, verts: [], normals: [] };
+      shapes.set(key, entry);
+    }
+    return entry;
+  };
+
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let z = minZ; z <= maxZ; z += 1) {
+      for (let x = minX; x <= maxX; x += 1) {
+        if (!Game.utils.isBlockAt(worldRef, x, y, z)) {
+          continue;
+        }
+        blockCount += 1;
+        const key = Game.utils.blockKey(x, y, z);
+        const entity = blockIndex ? blockIndex.get(key) : null;
+        const renderable = entity
+          ? worldRef.components.Renderable.get(entity)
+          : null;
+        const collider = entity
+          ? worldRef.components.Collider.get(entity)
+          : null;
+        const color = renderable?.color || [110, 145, 110];
+        const entry = ensureEntry(color);
+
+        const halfX = (collider?.w ?? 1) * grid * 0.5;
+        const halfY = (collider?.h ?? 1) * grid * 0.5;
+        const halfZ = (collider?.d ?? 1) * grid * 0.5;
+        const centerWorld = {
+          x: (x + 0.5) * grid,
+          y: -(y + 0.5) * grid,
+          z: (z + 0.5) * grid,
+        };
+
+        for (const face of Game.rendering.blockFaceDefs) {
+          if (
+            Game.utils.isBlockAt(
+              worldRef,
+              x + face.plane.x,
+              y + face.plane.y,
+              z + face.plane.z
+            )
+          ) {
+            continue;
+          }
+          for (const vert of face.verts) {
+            entry.normals.push(face.normal[0], face.normal[1], face.normal[2]);
+            entry.verts.push(
+              centerWorld.x + vert.sx * halfX,
+              centerWorld.y + vert.sy * halfY,
+              centerWorld.z + vert.sz * halfZ
+            );
+          }
+          faceCount += 1;
+        }
+      }
+    }
+  }
+
+  for (const entry of shapes.values()) {
+    if (canBuildGeometry) {
+      const verts = entry.verts;
+      const normals = entry.normals;
+      entry.mode = "geometry";
+      entry.geom = buildGeometry(() => {
+        beginShape(QUADS);
+        for (let i = 0; i < verts.length; i += 3) {
+          normal(normals[i], normals[i + 1], normals[i + 2]);
+          vertex(verts[i], verts[i + 1], verts[i + 2]);
+        }
+        endShape();
+      });
+      entry.verts = null;
+      entry.normals = null;
+    }
+  }
+
+  chunk.shapes = shapes.size > 0 ? shapes : null;
+  chunk.blockCount = blockCount;
+  chunk.faceCount = faceCount;
+  chunk.dirty = false;
+  return blockCount > 0;
+};
+
+Game.rendering.isChunkVisible = function isChunkVisible(
+  chunk,
+  cullPos,
+  viewDir,
+  cullDistance,
+  cullCos,
+  cullAngle
+) {
+  if (!chunk?.center || !cullPos || !viewDir) {
+    return true;
+  }
+  const dx = chunk.center.x - cullPos.x;
+  const dy = chunk.center.y - cullPos.y;
+  const dz = chunk.center.z - cullPos.z;
+  const distSq = dx * dx + dy * dy + dz * dz;
+  const radius = chunk.radius ?? 0;
+  if (cullDistance > 0) {
+    const maxDist = cullDistance + radius;
+    if (distSq > maxDist * maxDist) {
+      return false;
+    }
+  }
+  if (cullCos === null || cullCos === undefined) {
+    return true;
+  }
+  const dist = Math.sqrt(distSq);
+  if (dist <= 1e-6 || dist <= radius) {
+    return true;
+  }
+  const dot = (dx * viewDir.x + dy * viewDir.y + dz * viewDir.z) / dist;
+  if (!Number.isFinite(cullAngle)) {
+    return dot >= cullCos;
+  }
+  if (radius <= 1e-6) {
+    return dot >= cullCos;
+  }
+  const margin = Math.asin(Math.min(1, radius / dist));
+  const maxAngle = cullAngle + margin;
+  return dot >= Math.cos(maxAngle);
+};
+
 Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
-  ambientLight(150);
-  directionalLight(255, 255, 255, 0.3, -1, -0.4);
+  noLights();
+  ambientLight(220);
 
   noStroke();
 
@@ -51,12 +335,13 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
       viewDir = { x: dir.x / len, y: dir.y / len, z: dir.z / len };
     }
   }
-  const occluderMap = Game.rendering.computeOccluders(worldRef, cameraPos);
   const rendering = worldRef.resources.rendering;
   const cullDistance = rendering?.blockCullDistance ?? 0;
   const cullPadding = rendering?.blockCullFovPadding ?? 0;
+  const chunkSize = rendering?.blockChunkSize ?? 0;
   const cullPos = cameraState?.pos || cameraPos;
   let cullCos = null;
+  let cullAngle = null;
   if (cullDistance > 0) {
     const vFov = cameraState?.fov ?? Math.PI / 3;
     const aspect =
@@ -67,35 +352,83 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
     const maxHalfFov = Math.max(vFov, hFov) * 0.5 + cullPadding;
     cullCos = Math.cos(maxHalfFov);
+    const clamped = Math.max(-1, Math.min(1, cullCos));
+    cullAngle = Math.acos(clamped);
   }
-  const isBlockVisible = (center, hasOccluder) => {
-    if (hasOccluder || cullDistance <= 0) {
-      return true;
-    }
-    const dx = center.x - cullPos.x;
-    const dy = center.y - cullPos.y;
-    const dz = center.z - cullPos.z;
-    const distSq = dx * dx + dy * dy + dz * dz;
-    if (distSq > cullDistance * cullDistance) {
-      return false;
-    }
-    if (cullCos === null) {
-      return true;
-    }
-    const dist = Math.sqrt(distSq);
-    if (dist <= 1e-6) {
-      return true;
-    }
-    const dot = (dx * viewDir.x + dy * viewDir.y + dz * viewDir.z) / dist;
-    return dot >= cullCos;
-  };
-  const occluderBlocks = [];
   const spriteDraws = [];
+
+  if (chunkSize > 0) {
+    if (!rendering.blockChunks) {
+      Game.rendering.rebuildAllBlockChunks(worldRef);
+    }
+    const removeKeys = [];
+    for (const [key, chunk] of rendering.blockChunks || []) {
+      if (chunk?.dirty) {
+        const hasBlocks = Game.rendering.rebuildBlockChunk(
+          worldRef,
+          chunk,
+          chunkSize
+        );
+        if (!hasBlocks) {
+          removeKeys.push(key);
+          continue;
+        }
+      }
+      if (!chunk?.shapes || chunk.faceCount <= 0) {
+        continue;
+      }
+      if (
+        !Game.rendering.isChunkVisible(
+          chunk,
+          cullPos,
+          viewDir,
+          cullDistance,
+          cullCos,
+          cullAngle
+        )
+      ) {
+        continue;
+      }
+      for (const entry of chunk.shapes.values()) {
+        const color = entry.color || [110, 145, 110];
+        ambientMaterial(color[0], color[1], color[2]);
+        fill(color[0], color[1], color[2]);
+        if (
+          entry.mode === "geometry" &&
+          entry.geom &&
+          typeof model === "function"
+        ) {
+          model(entry.geom);
+        } else if (entry.verts && entry.normals) {
+          beginShape(QUADS);
+          for (let i = 0; i < entry.verts.length; i += 3) {
+            normal(
+              entry.normals[i],
+              entry.normals[i + 1],
+              entry.normals[i + 2]
+            );
+            vertex(
+              entry.verts[i],
+              entry.verts[i + 1],
+              entry.verts[i + 2]
+            );
+          }
+          endShape();
+        }
+      }
+    }
+    for (const key of removeKeys) {
+      rendering.blockChunks.delete(key);
+    }
+  }
 
   for (const [entity, renderable] of worldRef.components.Renderable.entries()) {
     const transform = worldRef.components.Transform.get(entity);
     const collider = worldRef.components.Collider.get(entity);
     if (!transform || !collider) {
+      continue;
+    }
+    if (worldRef.components.StaticBlock.has(entity)) {
       continue;
     }
 
@@ -182,37 +515,6 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
     };
     const worldPos = Game.utils.gameToWorld(center);
 
-    if (worldRef.components.StaticBlock.has(entity)) {
-      const cellX = Math.floor(transform.pos.x);
-      const cellY = Math.floor(transform.pos.y);
-      const cellZ = Math.floor(transform.pos.z);
-      const occluderAlpha = occluderMap.get(
-        Game.utils.blockKey(cellX, cellY, cellZ)
-      );
-      if (!isBlockVisible(center, occluderAlpha !== undefined)) {
-        continue;
-      }
-      if (occluderAlpha !== undefined) {
-        occluderBlocks.push({
-          worldPos,
-          collider,
-          color: renderable.color,
-          alpha: occluderAlpha,
-        });
-        continue;
-      }
-      Game.rendering.drawBlockFaces(
-        worldRef,
-        transform,
-        collider,
-        renderable,
-        cellX,
-        cellY,
-        cellZ
-      );
-      continue;
-    }
-
     push();
     translate(worldPos.x, worldPos.y, worldPos.z);
     fill(renderable.color[0], renderable.color[1], renderable.color[2]);
@@ -222,40 +524,6 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
       collider.d * Game.config.gridSize
     );
     pop();
-  }
-
-  if (occluderBlocks.length > 0 && renderState?.occluderShader) {
-    shader(renderState.occluderShader);
-    blendMode(REPLACE);
-    renderState.occluderShader.setUniform(
-      "uDitherScale",
-      worldRef.resources.rendering.occluderDitherScale ?? 1
-    );
-    renderState.occluderShader.setUniform(
-      "uAmbient",
-      worldRef.resources.rendering.occluderAmbient ?? 150 / 255
-    );
-    for (const block of occluderBlocks) {
-      const color = block.color || [100, 130, 100];
-      renderState.occluderShader.setUniform(
-        "uColor",
-        [color[0] / 255, color[1] / 255, color[2] / 255]
-      );
-      renderState.occluderShader.setUniform(
-        "uAlpha",
-        block.alpha ?? worldRef.resources.rendering.occluderAlpha ?? 0.35
-      );
-      push();
-      translate(block.worldPos.x, block.worldPos.y, block.worldPos.z);
-      box(
-        block.collider.w * Game.config.gridSize,
-        block.collider.h * Game.config.gridSize,
-        block.collider.d * Game.config.gridSize
-      );
-      pop();
-    }
-    resetShader();
-    blendMode(BLEND);
   }
 
   if (spriteDraws.length > 0) {

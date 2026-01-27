@@ -69,42 +69,16 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
   const jumpHeight = playerDef.jumpHeight ?? 1.5;
   const spawn = playerDef.spawn || { x: 2.5, y: 1, z: 2.5 };
 
-  worldRef.resources.rendering.occluderAlpha =
-    renderingDef.occluderAlpha ?? worldRef.resources.rendering.occluderAlpha;
-  worldRef.resources.rendering.occluderDitherScale =
-    renderingDef.occluderDitherScale ??
-    worldRef.resources.rendering.occluderDitherScale;
-  worldRef.resources.rendering.occluderConeRadius =
-    renderingDef.occluderConeRadius ??
-    worldRef.resources.rendering.occluderConeRadius;
-  worldRef.resources.rendering.occluderConeHeight =
-    renderingDef.occluderConeHeight ??
-    worldRef.resources.rendering.occluderConeHeight;
-  worldRef.resources.rendering.occluderConeSamples =
-    renderingDef.occluderConeSamples ??
-    worldRef.resources.rendering.occluderConeSamples;
-  worldRef.resources.rendering.occluderConeRings =
-    renderingDef.occluderConeRings ?? worldRef.resources.rendering.occluderConeRings;
-  worldRef.resources.rendering.occluderConeHeights =
-    renderingDef.occluderConeHeights ??
-    worldRef.resources.rendering.occluderConeHeights;
-  worldRef.resources.rendering.occluderFadeDistance =
-    renderingDef.occluderFadeDistance ??
-    worldRef.resources.rendering.occluderFadeDistance;
-  worldRef.resources.rendering.occluderAmbient =
-    renderingDef.occluderAmbient ?? worldRef.resources.rendering.occluderAmbient;
-  worldRef.resources.rendering.occluderUpdateFrames =
-    renderingDef.occluderUpdateFrames ??
-    worldRef.resources.rendering.occluderUpdateFrames;
-  worldRef.resources.rendering.occluderMoveThreshold =
-    renderingDef.occluderMoveThreshold ??
-    worldRef.resources.rendering.occluderMoveThreshold;
   worldRef.resources.rendering.blockCullDistance =
     renderingDef.blockCullDistance ??
     worldRef.resources.rendering.blockCullDistance;
   worldRef.resources.rendering.blockCullFovPadding =
     renderingDef.blockCullFovPadding ??
     worldRef.resources.rendering.blockCullFovPadding;
+  worldRef.resources.rendering.blockChunkSize =
+    renderingDef.blockChunkSize ??
+    renderingDef.chunkSize ??
+    worldRef.resources.rendering.blockChunkSize;
   const interactionDefaults = {
     range: interactionDef.range ?? 1.5,
     requireFacing: interactionDef.requireFacing ?? true,
@@ -161,6 +135,7 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     worldRef.resources.blockSet.add(blockKey);
     worldRef.resources.blockIndex.set(blockKey, blockEntity);
   }
+  Game.rendering?.rebuildAllBlockChunks?.(worldRef);
   if (worldRef.components?.StaticBlock) {
     for (const [entity, block] of worldRef.components.StaticBlock.entries()) {
       if (!block) {

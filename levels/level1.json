@@ -3,17 +3,8 @@
   "gravity": 18,
   "uiFont": "assets/opensans.ttf",
   "rendering": {
-    "occluderAlpha": 0.35,
-    "occluderDitherScale": 1,
-    "occluderConeRadius": 0.6,
-    "occluderConeHeight": 0.9,
-    "occluderConeSamples": 8,
-    "occluderConeRings": 2,
-    "occluderConeHeights": 2,
-    "occluderFadeDistance": 3.5,
-    "occluderAmbient": 0.588,
     "blockCullDistance": 25,
-    "blockCullFovPadding": 0.15
+    "blockCullFovPadding": 0.3
   },
   "interaction": {
     "dialogueYOffset": 0,
