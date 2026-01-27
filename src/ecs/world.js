@@ -64,6 +64,9 @@ Game.ecs.createWorld = function createWorld() {
         occluderConeHeights: 3,
         occluderFadeDistance: 3.5,
         occluderAmbient: 150 / 255,
+        blockAoEnabled: true,
+        blockAoStep: 0.12,
+        blockAoMin: 0.55,
       },
       paintingStreaming: {
         loadRadius: 6,

@@ -93,6 +93,12 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     worldRef.resources.rendering.occluderFadeDistance;
   worldRef.resources.rendering.occluderAmbient =
     renderingDef.occluderAmbient ?? worldRef.resources.rendering.occluderAmbient;
+  worldRef.resources.rendering.blockAoEnabled =
+    renderingDef.blockAoEnabled ?? worldRef.resources.rendering.blockAoEnabled;
+  worldRef.resources.rendering.blockAoStep =
+    renderingDef.blockAoStep ?? worldRef.resources.rendering.blockAoStep;
+  worldRef.resources.rendering.blockAoMin =
+    renderingDef.blockAoMin ?? worldRef.resources.rendering.blockAoMin;
   const interactionDefaults = {
     range: interactionDef.range ?? 1.5,
     requireFacing: interactionDef.requireFacing ?? true,

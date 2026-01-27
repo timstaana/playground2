@@ -164,7 +164,36 @@ Game.ui.renderDialogueOverlay = function renderDialogueOverlay(worldRef) {
     }
   }
 
+  Game.ui.renderDebugHud?.(ctx);
   Game.ui.renderTouchControls?.();
+};
+
+Game.ui.renderDebugHud = function renderDebugHud(ctx) {
+  const debugMode = Game.debug?.mode ?? 0;
+  if (debugMode <= 0) {
+    return;
+  }
+  if (!ctx) {
+    return;
+  }
+  const fps =
+    typeof frameRate === "function" ? Math.round(frameRate()) : null;
+  const padding = 10;
+  const fontFamily = Game.ui.fontFamily;
+  const label = fps !== null ? `FPS ${fps}` : "FPS --";
+
+  ctx.save();
+  ctx.font = `600 12px ${fontFamily}`;
+  ctx.textBaseline = "top";
+  ctx.textAlign = "left";
+  const textWidth = ctx.measureText(label).width;
+  const boxWidth = textWidth + padding * 2;
+  const boxHeight = 20;
+  ctx.fillStyle = "rgba(10, 12, 16, 0.6)";
+  ctx.fillRect(padding, padding, boxWidth, boxHeight);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+  ctx.fillText(label, padding * 2, padding + 4);
+  ctx.restore();
 };
 
 Game.ui.renderTouchControls = function renderTouchControls() {
