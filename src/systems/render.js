@@ -301,7 +301,6 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
 
   Game.systems.drawEditorSelection?.(worldRef);
   Game.systems.drawEditorHover?.(worldRef);
-  Game.systems.drawEditorRay?.(worldRef);
 
   Game.systems.drawPaintingLoadingIndicators(worldRef, cameraWorld, renderState);
 

@@ -105,6 +105,21 @@ Game.systems.setCameraState = function setCameraState(
   };
 };
 
+Game.systems.getFitDistanceForBounds =
+  function getFitDistanceForBounds(width, height, fov, aspect, padding) {
+    if (!width || !height || width <= 0 || height <= 0) {
+      return null;
+    }
+    const vFov = fov ?? Math.PI / 3;
+    const safeAspect = aspect && aspect > 0 ? aspect : 1;
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * safeAspect);
+    const distV = (height * 0.5) / Math.tan(vFov / 2);
+    const distH = (width * 0.5) / Math.tan(hFov / 2);
+    const base = Math.max(distV, distH);
+    const pad = padding ?? 1.06;
+    return base * pad;
+  };
+
 Game.systems.applyCameraPerspective =
   function applyCameraPerspective(worldRef) {
     if (!worldRef || !worldRef.resources) {
@@ -188,6 +203,7 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
 
     const targetTransform = worldRef.components.Transform.get(targetId);
     const targetCollider = worldRef.components.Collider.get(targetId);
+    const targetSprite = worldRef.components.BillboardSprite.get(targetId);
     if (!targetTransform || !targetCollider || !cameraTransform) {
       lightbox.mode = "follow";
       lightbox.targetId = null;
@@ -221,10 +237,33 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
       x: Math.sin(targetTransform.rotY),
       z: Math.cos(targetTransform.rotY),
     };
-    const maxDim = Math.max(targetCollider.w, targetCollider.h);
-    const distance =
-      maxDim * (lightbox.distanceScale ?? 1.4) +
-      (lightbox.distanceOffset ?? 0.6);
+    const isPainting = worldRef.components.Painting.has(targetId);
+    const aspect =
+      typeof width === "number" && typeof height === "number" && height > 0
+        ? width / height
+        : 1;
+    let distance = null;
+    if (isPainting) {
+      const fitWidth = targetSprite?.width ?? targetCollider.w;
+      const fitHeight = targetSprite?.height ?? targetCollider.h;
+      const padding =
+        lightbox.fitPadding ??
+        worldRef.components.Lightbox.get(targetId)?.fitPadding ??
+        1.06;
+      distance = Game.systems.getFitDistanceForBounds(
+        fitWidth,
+        fitHeight,
+        worldRef.resources.cameraState?.fov ?? Math.PI / 3,
+        aspect,
+        padding
+      );
+    }
+    if (distance === null) {
+      const maxDim = Math.max(targetCollider.w, targetCollider.h);
+      distance =
+        maxDim * (lightbox.distanceScale ?? 1.4) +
+        (lightbox.distanceOffset ?? 0.6);
+    }
     const smooth = lightbox.smooth ?? 0.2;
     Game.systems.applyFocusCamera(
       cameraTransform,

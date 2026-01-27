@@ -32,10 +32,6 @@ Game.systems.ensureEditorState = function ensureEditorState(worldRef) {
       selectedThickness: 3,
       selectedScale: 1.08,
       blockIndex: new Map(),
-      debugRay: true,
-      debugRayLength: 25,
-      debugRayColor: [120, 220, 255],
-      debugRayThickness: 2,
     };
   }
   return worldRef.resources.editor;
@@ -547,54 +543,4 @@ Game.systems.drawEditorSelection = function drawEditorSelection(worldRef) {
   strokeWeight(thickness);
   box(size * scale, size * scale, size * scale);
   pop();
-};
-
-Game.systems.drawEditorRay = function drawEditorRay(worldRef) {
-  const editor = worldRef?.resources?.editor;
-  if (!editor || !editor.enabled || !editor.debugRay) {
-    return;
-  }
-  const ray = editor.lastRay;
-  if (!ray || !ray.origin || !ray.dir) {
-    return;
-  }
-  const length = ray.hit?.distance ?? editor.debugRayLength ?? 20;
-  const end = {
-    x: ray.origin.x + ray.dir.x * length,
-    y: ray.origin.y + ray.dir.y * length,
-    z: ray.origin.z + ray.dir.z * length,
-  };
-  const startWorld = Game.utils.gameToWorld(ray.origin);
-  const endWorld = Game.utils.gameToWorld(end);
-  const color = editor.debugRayColor || [120, 220, 255];
-  const thickness = editor.debugRayThickness ?? 2;
-
-  resetShader();
-  blendMode(BLEND);
-  noLights();
-  stroke(color[0], color[1], color[2]);
-  strokeWeight(thickness);
-  line(
-    startWorld.x,
-    startWorld.y,
-    startWorld.z,
-    endWorld.x,
-    endWorld.y,
-    endWorld.z
-  );
-
-  if (ray.hit) {
-    const hitCenter = {
-      x: ray.hit.x + 0.5,
-      y: ray.hit.y + 0.5,
-      z: ray.hit.z + 0.5,
-    };
-    const hitWorld = Game.utils.gameToWorld(hitCenter);
-    push();
-    translate(hitWorld.x, hitWorld.y, hitWorld.z);
-    noFill();
-    stroke(color[0], color[1], color[2]);
-    box(Game.config.gridSize * 0.15);
-    pop();
-  }
 };
