@@ -151,8 +151,11 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
       kind: "block",
     });
     Game.ecs.addComponent(worldRef, "StaticBlock", blockEntity, {});
-    worldRef.resources.blockSet.add(Game.utils.blockKey(block.x, block.y, block.z));
+    const blockKey = Game.utils.blockKey(block.x, block.y, block.z);
+    worldRef.resources.blockSet.add(blockKey);
+    worldRef.resources.blockIndex.set(blockKey, blockEntity);
   }
+  Game.rendering?.rebuildBlockAoCache?.(worldRef);
 
   const player = Game.ecs.createEntity(worldRef);
   Game.ecs.addComponent(worldRef, "Transform", player, {

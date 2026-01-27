@@ -33,6 +33,7 @@ Game.ecs.createWorld = function createWorld() {
     },
     resources: {
       blockSet: new Set(),
+      blockIndex: new Map(),
       playerId: null,
       cameraId: null,
       textures: {

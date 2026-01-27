@@ -146,33 +146,40 @@ Game.systems.raycastBlocks = function raycastBlocks(
 
 Game.systems.ensureEditorBlockIndex =
   function ensureEditorBlockIndex(worldRef, editor) {
-    if (!editor.blockIndex) {
-      editor.blockIndex = new Map();
-    }
-    const blockSetSize = worldRef?.resources?.blockSet?.size ?? 0;
-    if (editor.blockIndex.size === blockSetSize) {
+  if (!editor.blockIndex) {
+    editor.blockIndex = new Map();
+  }
+  const blockSetSize = worldRef?.resources?.blockSet?.size ?? 0;
+  const globalIndex = worldRef?.resources?.blockIndex;
+  if (globalIndex) {
+    editor.blockIndex = globalIndex;
+    if (globalIndex.size === blockSetSize) {
       return;
     }
+    globalIndex.clear();
+  } else if (editor.blockIndex.size === blockSetSize) {
+    return;
+  } else {
     editor.blockIndex.clear();
-    if (!worldRef || !worldRef.components?.StaticBlock) {
-      return;
+  }
+  if (!worldRef || !worldRef.components?.StaticBlock) {
+    return;
+  }
+  for (const [entity] of worldRef.components.StaticBlock.entries()) {
+    const transform = worldRef.components.Transform.get(entity);
+    if (!transform || !transform.pos) {
+      continue;
     }
-    for (const [entity] of worldRef.components.StaticBlock.entries()) {
-      const transform = worldRef.components.Transform.get(entity);
-      if (!transform || !transform.pos) {
-        continue;
-      }
-      const cell = {
-        x: Math.floor(transform.pos.x),
-        y: Math.floor(transform.pos.y),
-        z: Math.floor(transform.pos.z),
-      };
-      editor.blockIndex.set(
-        Game.utils.blockKey(cell.x, cell.y, cell.z),
-        entity
-      );
-    }
-  };
+    const cell = {
+      x: Math.floor(transform.pos.x),
+      y: Math.floor(transform.pos.y),
+      z: Math.floor(transform.pos.z),
+    };
+    const key = Game.utils.blockKey(cell.x, cell.y, cell.z);
+    const targetIndex = globalIndex || editor.blockIndex;
+    targetIndex.set(key, entity);
+  }
+};
 
 Game.systems.getEditorBlockEntityAt =
   function getEditorBlockEntityAt(editor, x, y, z) {
@@ -210,11 +217,16 @@ Game.systems.addEditorBlock = function addEditorBlock(
     kind: "block",
   });
   Game.ecs.addComponent(worldRef, "StaticBlock", blockEntity, {});
-  worldRef.resources.blockSet.add(Game.utils.blockKey(x, y, z));
+  const key = Game.utils.blockKey(x, y, z);
+  worldRef.resources.blockSet.add(key);
+  if (worldRef.resources.blockIndex) {
+    worldRef.resources.blockIndex.set(key, blockEntity);
+  }
   const editor = worldRef.resources.editor;
   if (editor?.blockIndex) {
-    editor.blockIndex.set(Game.utils.blockKey(x, y, z), blockEntity);
+    editor.blockIndex.set(key, blockEntity);
   }
+  Game.rendering?.markBlockAoDirtyAround?.(worldRef, x, y, z);
   return true;
 };
 
@@ -251,6 +263,10 @@ Game.systems.moveEditorBlock = function moveEditorBlock(
   const fromKey = Game.utils.blockKey(fromCell.x, fromCell.y, fromCell.z);
   worldRef.resources.blockSet.delete(fromKey);
   worldRef.resources.blockSet.add(toKey);
+  if (worldRef.resources.blockIndex) {
+    worldRef.resources.blockIndex.delete(fromKey);
+    worldRef.resources.blockIndex.set(toKey, entity);
+  }
   if (editor?.blockIndex) {
     editor.blockIndex.delete(fromKey);
     editor.blockIndex.set(toKey, entity);
@@ -259,6 +275,8 @@ Game.systems.moveEditorBlock = function moveEditorBlock(
   transform.pos.y = toCell.y;
   transform.pos.z = toCell.z + 0.5;
   worldRef.components.Transform.set(entity, transform);
+  Game.rendering?.markBlockAoDirtyAround?.(worldRef, fromCell.x, fromCell.y, fromCell.z);
+  Game.rendering?.markBlockAoDirtyAround?.(worldRef, toCell.x, toCell.y, toCell.z);
   return true;
 };
 
@@ -279,7 +297,9 @@ Game.systems.deleteEditorBlock = function deleteEditorBlock(
     };
     const key = Game.utils.blockKey(cell.x, cell.y, cell.z);
     worldRef.resources?.blockSet?.delete(key);
+    worldRef.resources?.blockIndex?.delete(key);
     editor?.blockIndex?.delete(key);
+    Game.rendering?.markBlockAoDirtyAround?.(worldRef, cell.x, cell.y, cell.z);
   }
   Game.ecs.removeEntity(worldRef, entity);
   return true;

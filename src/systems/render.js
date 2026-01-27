@@ -1,5 +1,6 @@
 window.Game = window.Game || {};
 Game.systems = Game.systems || {};
+Game.rendering = Game.rendering || {};
 
 Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
   ambientLight(150);
@@ -133,6 +134,7 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
     const worldPos = Game.utils.gameToWorld(center);
 
     if (worldRef.components.StaticBlock.has(entity)) {
+      const staticBlock = worldRef.components.StaticBlock.get(entity);
       const cellX = Math.floor(transform.pos.x);
       const cellY = Math.floor(transform.pos.y);
       const cellZ = Math.floor(transform.pos.z);
@@ -152,7 +154,11 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
         worldRef,
         transform,
         collider,
-        renderable
+        renderable,
+        staticBlock,
+        cellX,
+        cellY,
+        cellZ
       );
       continue;
     }
@@ -321,6 +327,97 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
 
 };
 
+Game.rendering.blockFaceDefs = [
+  {
+    key: "px",
+    plane: { x: 1, y: 0, z: 0 },
+    normal: [1, 0, 0],
+    axisU: "y",
+    axisV: "z",
+    verts: [
+      { sx: 1, sy: -1, sz: -1 },
+      { sx: 1, sy: -1, sz: 1 },
+      { sx: 1, sy: 1, sz: 1 },
+      { sx: 1, sy: 1, sz: -1 },
+    ],
+  },
+  {
+    key: "nx",
+    plane: { x: -1, y: 0, z: 0 },
+    normal: [-1, 0, 0],
+    axisU: "y",
+    axisV: "z",
+    verts: [
+      { sx: -1, sy: -1, sz: 1 },
+      { sx: -1, sy: -1, sz: -1 },
+      { sx: -1, sy: 1, sz: -1 },
+      { sx: -1, sy: 1, sz: 1 },
+    ],
+  },
+  {
+    key: "pz",
+    plane: { x: 0, y: 0, z: 1 },
+    normal: [0, 0, 1],
+    axisU: "x",
+    axisV: "y",
+    verts: [
+      { sx: -1, sy: -1, sz: 1 },
+      { sx: 1, sy: -1, sz: 1 },
+      { sx: 1, sy: 1, sz: 1 },
+      { sx: -1, sy: 1, sz: 1 },
+    ],
+  },
+  {
+    key: "nz",
+    plane: { x: 0, y: 0, z: -1 },
+    normal: [0, 0, -1],
+    axisU: "x",
+    axisV: "y",
+    verts: [
+      { sx: 1, sy: -1, sz: -1 },
+      { sx: -1, sy: -1, sz: -1 },
+      { sx: -1, sy: 1, sz: -1 },
+      { sx: 1, sy: 1, sz: -1 },
+    ],
+  },
+  {
+    key: "py",
+    plane: { x: 0, y: 1, z: 0 },
+    normal: [0, -1, 0],
+    axisU: "x",
+    axisV: "z",
+    verts: [
+      { sx: -1, sy: -1, sz: 1 },
+      { sx: 1, sy: -1, sz: 1 },
+      { sx: 1, sy: -1, sz: -1 },
+      { sx: -1, sy: -1, sz: -1 },
+    ],
+  },
+  {
+    key: "ny",
+    plane: { x: 0, y: -1, z: 0 },
+    normal: [0, 1, 0],
+    axisU: "x",
+    axisV: "z",
+    verts: [
+      { sx: -1, sy: 1, sz: -1 },
+      { sx: 1, sy: 1, sz: -1 },
+      { sx: 1, sy: 1, sz: 1 },
+      { sx: -1, sy: 1, sz: 1 },
+    ],
+  },
+];
+
+Game.rendering.getBlockVertexSign = function getBlockVertexSign(axis, vert) {
+  if (axis === "x") {
+    return vert.sx >= 0 ? 1 : -1;
+  }
+  if (axis === "y") {
+    return vert.sy >= 0 ? -1 : 1;
+  }
+  return vert.sz >= 0 ? 1 : -1;
+};
+
 Game.rendering.getBlockVertexAoShade = function getBlockVertexAoShade(
   worldRef,
   cellX,
@@ -364,16 +461,150 @@ Game.rendering.getBlockVertexAoShade = function getBlockVertexAoShade(
   const occU = isSolid(sideU);
   const occV = isSolid(sideV);
   const occCorner = isSolid(corner);
-  const count = occU && occV ? 3 : (occU ? 1 : 0) + (occV ? 1 : 0) + (occCorner ? 1 : 0);
+  const count =
+    occU && occV
+      ? 3
+      : (occU ? 1 : 0) + (occV ? 1 : 0) + (occCorner ? 1 : 0);
   const shade = 1 - count * step;
   return Math.max(minShade, shade);
+};
+
+Game.rendering.computeBlockAoCache = function computeBlockAoCache(
+  worldRef,
+  cellX,
+  cellY,
+  cellZ
+) {
+  const faces = Game.rendering.blockFaceDefs;
+  const ao = new Float32Array(faces.length * 4);
+  const rendering = worldRef?.resources?.rendering;
+  if (rendering && rendering.blockAoEnabled === false) {
+    ao.fill(1);
+    return ao;
+  }
+  let index = 0;
+  for (const face of faces) {
+    for (const vert of face.verts) {
+      const signU = Game.rendering.getBlockVertexSign(face.axisU, vert);
+      const signV = Game.rendering.getBlockVertexSign(face.axisV, vert);
+      ao[index] = Game.rendering.getBlockVertexAoShade(
+        worldRef,
+        cellX,
+        cellY,
+        cellZ,
+        face.plane,
+        face.axisU,
+        face.axisV,
+        signU,
+        signV
+      );
+      index += 1;
+    }
+  }
+  return ao;
+};
+
+Game.rendering.ensureBlockAoCache = function ensureBlockAoCache(
+  worldRef,
+  staticBlock,
+  cellX,
+  cellY,
+  cellZ
+) {
+  if (!staticBlock) {
+    return null;
+  }
+  const expected = Game.rendering.blockFaceDefs.length * 4;
+  if (
+    !staticBlock.ao ||
+    staticBlock.ao.length !== expected ||
+    staticBlock.aoDirty
+  ) {
+    staticBlock.ao = Game.rendering.computeBlockAoCache(
+      worldRef,
+      cellX,
+      cellY,
+      cellZ
+    );
+    staticBlock.aoDirty = false;
+  }
+  return staticBlock.ao;
+};
+
+Game.rendering.markBlockAoDirtyAt = function markBlockAoDirtyAt(
+  worldRef,
+  cellX,
+  cellY,
+  cellZ
+) {
+  const key = Game.utils.blockKey(cellX, cellY, cellZ);
+  const entity = worldRef?.resources?.blockIndex?.get(key);
+  if (!entity) {
+    return;
+  }
+  const block = worldRef.components?.StaticBlock?.get(entity);
+  if (!block) {
+    return;
+  }
+  block.aoDirty = true;
+  worldRef.components.StaticBlock.set(entity, block);
+};
+
+Game.rendering.markBlockAoDirtyAround = function markBlockAoDirtyAround(
+  worldRef,
+  cellX,
+  cellY,
+  cellZ
+) {
+  if (!worldRef?.resources?.blockIndex) {
+    return;
+  }
+  for (let dy = -1; dy <= 1; dy += 1) {
+    for (let dz = -1; dz <= 1; dz += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        Game.rendering.markBlockAoDirtyAt(
+          worldRef,
+          cellX + dx,
+          cellY + dy,
+          cellZ + dz
+        );
+      }
+    }
+  }
+};
+
+Game.rendering.rebuildBlockAoCache = function rebuildBlockAoCache(worldRef) {
+  if (!worldRef?.components?.StaticBlock) {
+    return;
+  }
+  for (const [entity, block] of worldRef.components.StaticBlock.entries()) {
+    const transform = worldRef.components.Transform.get(entity);
+    if (!transform?.pos) {
+      continue;
+    }
+    const cellX = Math.floor(transform.pos.x);
+    const cellY = Math.floor(transform.pos.y);
+    const cellZ = Math.floor(transform.pos.z);
+    block.ao = Game.rendering.computeBlockAoCache(
+      worldRef,
+      cellX,
+      cellY,
+      cellZ
+    );
+    block.aoDirty = false;
+    worldRef.components.StaticBlock.set(entity, block);
+  }
 };
 
 Game.rendering.drawBlockWithVertexAO = function drawBlockWithVertexAO(
   worldRef,
   transform,
   collider,
-  renderable
+  renderable,
+  staticBlock,
+  cellX,
+  cellY,
+  cellZ
 ) {
   if (!transform || !collider || !renderable) {
     return;
@@ -391,135 +622,48 @@ Game.rendering.drawBlockWithVertexAO = function drawBlockWithVertexAO(
     z: transform.pos.z,
   };
   const worldPos = Game.utils.gameToWorld(center);
-  const cellX = Math.floor(transform.pos.x);
-  const cellY = Math.floor(transform.pos.y);
-  const cellZ = Math.floor(transform.pos.z);
+  const blockX = Number.isFinite(cellX) ? cellX : Math.floor(transform.pos.x);
+  const blockY = Number.isFinite(cellY) ? cellY : Math.floor(transform.pos.y);
+  const blockZ = Number.isFinite(cellZ) ? cellZ : Math.floor(transform.pos.z);
   const base = renderable.color || [110, 145, 110];
   const isBlock = (dx, dy, dz) =>
-    Game.utils.isBlockAt(worldRef, cellX + dx, cellY + dy, cellZ + dz);
-
-  const faces = [
-    {
-      key: "px",
-      skip: isBlock(1, 0, 0),
-      plane: { x: 1, y: 0, z: 0 },
-      normal: [1, 0, 0],
-      axisU: "y",
-      axisV: "z",
-      verts: [
-        { p: [halfX, -halfY, -halfZ] },
-        { p: [halfX, -halfY, halfZ] },
-        { p: [halfX, halfY, halfZ] },
-        { p: [halfX, halfY, -halfZ] },
-      ],
-    },
-    {
-      key: "nx",
-      skip: isBlock(-1, 0, 0),
-      plane: { x: -1, y: 0, z: 0 },
-      normal: [-1, 0, 0],
-      axisU: "y",
-      axisV: "z",
-      verts: [
-        { p: [-halfX, -halfY, halfZ] },
-        { p: [-halfX, -halfY, -halfZ] },
-        { p: [-halfX, halfY, -halfZ] },
-        { p: [-halfX, halfY, halfZ] },
-      ],
-    },
-    {
-      key: "pz",
-      skip: isBlock(0, 0, 1),
-      plane: { x: 0, y: 0, z: 1 },
-      normal: [0, 0, 1],
-      axisU: "x",
-      axisV: "y",
-      verts: [
-        { p: [-halfX, -halfY, halfZ] },
-        { p: [halfX, -halfY, halfZ] },
-        { p: [halfX, halfY, halfZ] },
-        { p: [-halfX, halfY, halfZ] },
-      ],
-    },
-    {
-      key: "nz",
-      skip: isBlock(0, 0, -1),
-      plane: { x: 0, y: 0, z: -1 },
-      normal: [0, 0, -1],
-      axisU: "x",
-      axisV: "y",
-      verts: [
-        { p: [halfX, -halfY, -halfZ] },
-        { p: [-halfX, -halfY, -halfZ] },
-        { p: [-halfX, halfY, -halfZ] },
-        { p: [halfX, halfY, -halfZ] },
-      ],
-    },
-    {
-      key: "py",
-      skip: isBlock(0, 1, 0),
-      plane: { x: 0, y: 1, z: 0 },
-      normal: [0, -1, 0],
-      axisU: "x",
-      axisV: "z",
-      verts: [
-        { p: [-halfX, -halfY, halfZ] },
-        { p: [halfX, -halfY, halfZ] },
-        { p: [halfX, -halfY, -halfZ] },
-        { p: [-halfX, -halfY, -halfZ] },
-      ],
-    },
-    {
-      key: "ny",
-      skip: isBlock(0, -1, 0),
-      plane: { x: 0, y: -1, z: 0 },
-      normal: [0, 1, 0],
-      axisU: "x",
-      axisV: "z",
-      verts: [
-        { p: [-halfX, halfY, -halfZ] },
-        { p: [halfX, halfY, -halfZ] },
-        { p: [halfX, halfY, halfZ] },
-        { p: [-halfX, halfY, halfZ] },
-      ],
-    },
-  ];
+    Game.utils.isBlockAt(worldRef, blockX + dx, blockY + dy, blockZ + dz);
+  const faces = Game.rendering.blockFaceDefs;
+  const cachedAo = Game.rendering.ensureBlockAoCache(
+    worldRef,
+    staticBlock,
+    blockX,
+    blockY,
+    blockZ
+  );
 
   push();
   translate(worldPos.x, worldPos.y, worldPos.z);
   noStroke();
-  for (const face of faces) {
-    if (face.skip) {
+  for (let faceIndex = 0; faceIndex < faces.length; faceIndex += 1) {
+    const face = faces[faceIndex];
+    if (isBlock(face.plane.x, face.plane.y, face.plane.z)) {
       continue;
     }
     beginShape(QUADS);
     normal(face.normal[0], face.normal[1], face.normal[2]);
-    for (const vert of face.verts) {
-      const local = { x: vert.p[0], y: vert.p[1], z: vert.p[2] };
-      const signForAxis = (axis) => {
-        if (axis === "x") {
-          return local.x >= 0 ? 1 : -1;
-        }
-        if (axis === "y") {
-          return local.y >= 0 ? -1 : 1;
-        }
-        return local.z >= 0 ? 1 : -1;
-      };
-      const signU = signForAxis(face.axisU);
-      const signV = signForAxis(face.axisV);
-      const shade = Game.rendering.getBlockVertexAoShade(
-        worldRef,
-        cellX,
-        cellY,
-        cellZ,
-        face.plane,
-        face.axisU,
-        face.axisV,
-        signU,
-        signV
-      );
+    for (let vertIndex = 0; vertIndex < face.verts.length; vertIndex += 1) {
+      const vert = face.verts[vertIndex];
+      const shade = cachedAo
+        ? cachedAo[faceIndex * 4 + vertIndex]
+        : Game.rendering.getBlockVertexAoShade(
+            worldRef,
+            blockX,
+            blockY,
+            blockZ,
+            face.plane,
+            face.axisU,
+            face.axisV,
+            Game.rendering.getBlockVertexSign(face.axisU, vert),
+            Game.rendering.getBlockVertexSign(face.axisV, vert)
+          );
       fill(base[0] * shade, base[1] * shade, base[2] * shade);
-      vertex(local.x, local.y, local.z);
+      vertex(vert.sx * halfX, vert.sy * halfY, vert.sz * halfZ);
     }
     endShape();
   }
