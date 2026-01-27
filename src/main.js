@@ -5,10 +5,14 @@ let loadError = null;
 let assetStatus = null;
 let uiFont = null;
 let renderState = null;
+let loadingScreen = null;
 
 function setup() {
   const canvas = createCanvas(windowWidth, windowHeight, WEBGL);
   frameRate(60);
+
+  loadingScreen = document.getElementById("loading-screen");
+  setLoadingScreen(true, "Loading...");
 
   // --- iOS Safari: stop selection/callout/drag/scroll/zoom on the canvas ---
   const el = canvas.elt;
@@ -53,6 +57,20 @@ function setup() {
   loadLevel();
 }
 
+function setLoadingScreen(visible, message) {
+  if (!loadingScreen) {
+    return;
+  }
+  if (typeof message === "string") {
+    loadingScreen.textContent = message;
+  }
+  if (visible) {
+    loadingScreen.classList.remove("hidden");
+  } else {
+    loadingScreen.classList.add("hidden");
+  }
+}
+
 
 function draw() {
   const dt = Math.min(0.033, deltaTime / 1000);
@@ -77,6 +95,7 @@ function windowResized() {
 
 async function loadLevel() {
   try {
+    setLoadingScreen(true, "Loading level...");
     const response = await fetch("levels/level1.json");
     if (!response.ok) {
       throw new Error(`Failed to load level: ${response.status}`);
@@ -88,6 +107,7 @@ async function loadLevel() {
     levelData = {};
   }
 
+  setLoadingScreen(true, "Loading assets...");
   assetStatus = await Game.assets.loadAssets(levelData || {});
   uiFont = assetStatus.uiFont || null;
   if (renderState) {
@@ -106,6 +126,13 @@ async function loadLevel() {
     Game.net?.connect?.(world);
   }
   loading = false;
+  if (loadError) {
+    setLoadingScreen(true, "Failed to load level.");
+  } else if (assetStatus && assetStatus.missing.length > 0) {
+    setLoadingScreen(true, "Missing assets.");
+  } else {
+    setLoadingScreen(false);
+  }
 }
 
 function keyPressed() {

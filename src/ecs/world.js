@@ -62,6 +62,8 @@ Game.ecs.createWorld = function createWorld() {
         maxConcurrent: 2,
         loading: new Map(),
         failed: new Set(),
+        pending: new Map(),
+        pendingPerFrame: 1,
       },
       network: {
         enabled: true,

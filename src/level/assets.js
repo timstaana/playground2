@@ -5,7 +5,17 @@ Game.assets.loadImageAsync = function loadImageAsync(path) {
   if (typeof loadImage !== "function") {
     return Promise.reject(new Error("loadImage is not available"));
   }
-  return Promise.resolve(loadImage(path));
+  return new Promise((resolve, reject) => {
+    try {
+      loadImage(
+        path,
+        (img) => resolve(img),
+        (err) => reject(err || new Error(`Failed to load image: ${path}`))
+      );
+    } catch (err) {
+      reject(err);
+    }
+  });
 };
 
 Game.assets.loadFontAsync = function loadFontAsync(path) {
@@ -15,8 +25,7 @@ Game.assets.loadFontAsync = function loadFontAsync(path) {
   return Promise.resolve(loadFont(path));
 };
 
-Game.assets.loadSpriteTexture = async function loadSpriteTexture(path) {
-  const img = await Game.assets.loadImageAsync(path);
+Game.assets.buildSpriteTexture = function buildSpriteTexture(img) {
   if (!img || !img.width || !img.height) {
     throw new Error("Invalid image dimensions");
   }
@@ -30,6 +39,11 @@ Game.assets.loadSpriteTexture = async function loadSpriteTexture(path) {
     lastFrame: -1,
     staticDrawn: true,
   };
+};
+
+Game.assets.loadSpriteTexture = async function loadSpriteTexture(path) {
+  const img = await Game.assets.loadImageAsync(path);
+  return Game.assets.buildSpriteTexture(img);
 };
 
 Game.assets.loadAssets = async function loadAssets(level) {

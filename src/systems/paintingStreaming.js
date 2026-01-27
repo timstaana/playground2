@@ -23,15 +23,42 @@ Game.systems.paintingStreamingSystem = function paintingStreamingSystem(
   const textures = worldRef.resources.textures || {};
   const loading = streaming.loading || new Map();
   const failed = streaming.failed || new Set();
+  const pending = streaming.pending || new Map();
   streaming.loading = loading;
   streaming.failed = failed;
+  streaming.pending = pending;
 
   const loadRadius = streaming.loadRadius ?? 6;
   const maxConcurrent = streaming.maxConcurrent ?? 2;
+  const pendingPerFrame = streaming.pendingPerFrame ?? 1;
   let activeLoads = 0;
   for (const entry of loading.values()) {
     if (entry && entry.state === "loading") {
       activeLoads += 1;
+    }
+  }
+
+  if (pending.size > 0) {
+    let processed = 0;
+    for (const [textureKey, img] of pending.entries()) {
+      if (processed >= pendingPerFrame) {
+        break;
+      }
+      processed += 1;
+      try {
+        const paintingTex = Game.assets.buildSpriteTexture(img);
+        if (!Game.rendering.isValidTexture(paintingTex.texture)) {
+          throw new Error("Invalid texture instance");
+        }
+        worldRef.resources.textures[textureKey] = paintingTex;
+        if (Game.level?.updatePaintingSpriteForTexture) {
+          Game.level.updatePaintingSpriteForTexture(worldRef, textureKey);
+        }
+      } catch (err) {
+        console.warn(`Failed to finalize painting: ${textureKey}`, err);
+        failed.add(textureKey);
+      }
+      pending.delete(textureKey);
     }
   }
 
@@ -45,7 +72,12 @@ Game.systems.paintingStreamingSystem = function paintingStreamingSystem(
     if (!textureKey || !imagePath) {
       continue;
     }
-    if (textures[textureKey] || failed.has(textureKey) || loading.has(textureKey)) {
+    if (
+      textures[textureKey] ||
+      failed.has(textureKey) ||
+      loading.has(textureKey) ||
+      pending.has(textureKey)
+    ) {
       continue;
     }
     const transform = worldRef.components.Transform.get(entity);
@@ -74,18 +106,10 @@ Game.systems.paintingStreamingSystem = function paintingStreamingSystem(
     activeLoads += 1;
     loading.set(candidate.textureKey, { state: "loading" });
     Game.assets
-      .loadSpriteTexture(candidate.imagePath)
-      .then((paintingTex) => {
-        if (!Game.rendering.isValidTexture(paintingTex.texture)) {
-          throw new Error("Invalid texture instance");
-        }
-        if (worldRef?.resources?.textures) {
-          worldRef.resources.textures[candidate.textureKey] = paintingTex;
-        }
-        if (Game.level?.updatePaintingSpriteForTexture) {
-          Game.level.updatePaintingSpriteForTexture(worldRef, candidate.textureKey);
-        }
+      .loadImageAsync(candidate.imagePath)
+      .then((img) => {
         loading.delete(candidate.textureKey);
+        pending.set(candidate.textureKey, img);
       })
       .catch((err) => {
         console.warn(`Missing painting: ${candidate.imagePath}`, err);
