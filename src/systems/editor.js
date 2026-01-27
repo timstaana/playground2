@@ -226,7 +226,7 @@ Game.systems.addEditorBlock = function addEditorBlock(
   if (editor?.blockIndex) {
     editor.blockIndex.set(key, blockEntity);
   }
-  Game.rendering?.markBlockAoDirtyAround?.(worldRef, x, y, z);
+  Game.rendering?.markBlockChunkDirtyAround?.(worldRef, x, y, z);
   return true;
 };
 
@@ -275,8 +275,18 @@ Game.systems.moveEditorBlock = function moveEditorBlock(
   transform.pos.y = toCell.y;
   transform.pos.z = toCell.z + 0.5;
   worldRef.components.Transform.set(entity, transform);
-  Game.rendering?.markBlockAoDirtyAround?.(worldRef, fromCell.x, fromCell.y, fromCell.z);
-  Game.rendering?.markBlockAoDirtyAround?.(worldRef, toCell.x, toCell.y, toCell.z);
+  Game.rendering?.markBlockChunkDirtyAround?.(
+    worldRef,
+    fromCell.x,
+    fromCell.y,
+    fromCell.z
+  );
+  Game.rendering?.markBlockChunkDirtyAround?.(
+    worldRef,
+    toCell.x,
+    toCell.y,
+    toCell.z
+  );
   return true;
 };
 
@@ -299,7 +309,12 @@ Game.systems.deleteEditorBlock = function deleteEditorBlock(
     worldRef.resources?.blockSet?.delete(key);
     worldRef.resources?.blockIndex?.delete(key);
     editor?.blockIndex?.delete(key);
-    Game.rendering?.markBlockAoDirtyAround?.(worldRef, cell.x, cell.y, cell.z);
+    Game.rendering?.markBlockChunkDirtyAround?.(
+      worldRef,
+      cell.x,
+      cell.y,
+      cell.z
+    );
   }
   Game.ecs.removeEntity(worldRef, entity);
   return true;

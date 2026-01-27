@@ -74,7 +74,8 @@ function setLoadingScreen(visible, message) {
 
 
 function draw() {
-  const dt = Math.min(0.033, deltaTime / 1000);
+  const rawDt = deltaTime / 1000;
+  const dt = Math.min(0.033, rawDt);
 
   background(180, 210, 240);
 

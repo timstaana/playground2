@@ -93,12 +93,18 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     worldRef.resources.rendering.occluderFadeDistance;
   worldRef.resources.rendering.occluderAmbient =
     renderingDef.occluderAmbient ?? worldRef.resources.rendering.occluderAmbient;
-  worldRef.resources.rendering.blockAoEnabled =
-    renderingDef.blockAoEnabled ?? worldRef.resources.rendering.blockAoEnabled;
-  worldRef.resources.rendering.blockAoStep =
-    renderingDef.blockAoStep ?? worldRef.resources.rendering.blockAoStep;
-  worldRef.resources.rendering.blockAoMin =
-    renderingDef.blockAoMin ?? worldRef.resources.rendering.blockAoMin;
+  worldRef.resources.rendering.occluderUpdateFrames =
+    renderingDef.occluderUpdateFrames ??
+    worldRef.resources.rendering.occluderUpdateFrames;
+  worldRef.resources.rendering.occluderMoveThreshold =
+    renderingDef.occluderMoveThreshold ??
+    worldRef.resources.rendering.occluderMoveThreshold;
+  worldRef.resources.rendering.blockCullDistance =
+    renderingDef.blockCullDistance ??
+    worldRef.resources.rendering.blockCullDistance;
+  worldRef.resources.rendering.blockCullFovPadding =
+    renderingDef.blockCullFovPadding ??
+    worldRef.resources.rendering.blockCullFovPadding;
   const interactionDefaults = {
     range: interactionDef.range ?? 1.5,
     requireFacing: interactionDef.requireFacing ?? true,
@@ -155,8 +161,29 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     worldRef.resources.blockSet.add(blockKey);
     worldRef.resources.blockIndex.set(blockKey, blockEntity);
   }
-  Game.rendering?.rebuildBlockAoCache?.(worldRef);
-
+  if (worldRef.components?.StaticBlock) {
+    for (const [entity, block] of worldRef.components.StaticBlock.entries()) {
+      if (!block) {
+        continue;
+      }
+      let changed = false;
+      if ("ao" in block) {
+        delete block.ao;
+        changed = true;
+      }
+      if ("aoDirty" in block) {
+        delete block.aoDirty;
+        changed = true;
+      }
+      if ("aoMode" in block) {
+        delete block.aoMode;
+        changed = true;
+      }
+      if (changed) {
+        worldRef.components.StaticBlock.set(entity, block);
+      }
+    }
+  }
   const player = Game.ecs.createEntity(worldRef);
   Game.ecs.addComponent(worldRef, "Transform", player, {
     pos: { x: spawn.x, y: spawn.y, z: spawn.z },

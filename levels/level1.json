@@ -7,11 +7,13 @@
     "occluderDitherScale": 1,
     "occluderConeRadius": 0.6,
     "occluderConeHeight": 0.9,
-    "occluderConeSamples": 12,
-    "occluderConeRings": 3,
-    "occluderConeHeights": 3,
+    "occluderConeSamples": 8,
+    "occluderConeRings": 2,
+    "occluderConeHeights": 2,
     "occluderFadeDistance": 3.5,
-    "occluderAmbient": 0.588
+    "occluderAmbient": 0.588,
+    "blockCullDistance": 25,
+    "blockCullFovPadding": 0.15
   },
   "interaction": {
     "dialogueYOffset": 0,

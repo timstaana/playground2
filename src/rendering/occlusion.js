@@ -3,6 +3,10 @@ Game.rendering = Game.rendering || {};
 
 Game.rendering.computeOccluders = function computeOccluders(worldRef, cameraPos) {
   const occluders = new Map();
+  const rendering = worldRef?.resources?.rendering;
+  if (!rendering) {
+    return occluders;
+  }
   const playerId = worldRef.resources.playerId;
   if (!playerId) {
     return occluders;
@@ -15,7 +19,6 @@ Game.rendering.computeOccluders = function computeOccluders(worldRef, cameraPos)
     return occluders;
   }
 
-  const rendering = worldRef.resources.rendering;
   const radius = rendering.occluderConeRadius ?? 1.4;
   const height = rendering.occluderConeHeight ?? 0.9;
   const samples = rendering.occluderConeSamples ?? 12;
@@ -25,6 +28,47 @@ Game.rendering.computeOccluders = function computeOccluders(worldRef, cameraPos)
 
   const baseY = transform.pos.y + (sprite?.offsetY ?? collider.h / 2);
   const center = { x: transform.pos.x, y: baseY, z: transform.pos.z };
+
+  const cache =
+    rendering.occluderCache ||
+    (rendering.occluderCache = {
+      map: new Map(),
+      lastCameraPos: null,
+      lastCenter: null,
+      lastFrame: -1,
+    });
+  const updateFrames = rendering.occluderUpdateFrames ?? 1;
+  const moveThreshold = rendering.occluderMoveThreshold ?? 0;
+  const frame =
+    typeof frameCount === "number" ? frameCount : (cache.lastFrame ?? 0) + 1;
+  const moved = (() => {
+    if (moveThreshold <= 0) {
+      return true;
+    }
+    const threshSq = moveThreshold * moveThreshold;
+    if (!cache.lastCameraPos || !cache.lastCenter) {
+      return true;
+    }
+    const dcx = cameraPos.x - cache.lastCameraPos.x;
+    const dcy = cameraPos.y - cache.lastCameraPos.y;
+    const dcz = cameraPos.z - cache.lastCameraPos.z;
+    const dtx = center.x - cache.lastCenter.x;
+    const dty = center.y - cache.lastCenter.y;
+    const dtz = center.z - cache.lastCenter.z;
+    return (
+      dcx * dcx + dcy * dcy + dcz * dcz > threshSq ||
+      dtx * dtx + dty * dty + dtz * dtz > threshSq
+    );
+  })();
+
+  if (
+    cache.map &&
+    cache.lastFrame >= 0 &&
+    (!moved ||
+      (updateFrames > 1 && frame - cache.lastFrame < updateFrames))
+  ) {
+    return cache.map;
+  }
 
   Game.rendering.traceRayOccluders(worldRef, cameraPos, center, 1, occluders);
 
@@ -52,6 +96,10 @@ Game.rendering.computeOccluders = function computeOccluders(worldRef, cameraPos)
     }
   }
 
+  cache.map = occluders;
+  cache.lastCameraPos = { x: cameraPos.x, y: cameraPos.y, z: cameraPos.z };
+  cache.lastCenter = { x: center.x, y: center.y, z: center.z };
+  cache.lastFrame = frame;
   return occluders;
 };
 

@@ -39,7 +39,56 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
       };
     }
   }
+  const cameraState = worldRef.resources.cameraState;
+  if (cameraState?.pos && cameraState?.lookAt) {
+    const dir = {
+      x: cameraState.lookAt.x - cameraState.pos.x,
+      y: cameraState.lookAt.y - cameraState.pos.y,
+      z: cameraState.lookAt.z - cameraState.pos.z,
+    };
+    const len = Math.hypot(dir.x, dir.y, dir.z);
+    if (len > 1e-6) {
+      viewDir = { x: dir.x / len, y: dir.y / len, z: dir.z / len };
+    }
+  }
   const occluderMap = Game.rendering.computeOccluders(worldRef, cameraPos);
+  const rendering = worldRef.resources.rendering;
+  const cullDistance = rendering?.blockCullDistance ?? 0;
+  const cullPadding = rendering?.blockCullFovPadding ?? 0;
+  const cullPos = cameraState?.pos || cameraPos;
+  let cullCos = null;
+  if (cullDistance > 0) {
+    const vFov = cameraState?.fov ?? Math.PI / 3;
+    const aspect =
+      cameraState?.aspect ||
+      (typeof width === "number" && typeof height === "number" && height > 0
+        ? width / height
+        : 1);
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+    const maxHalfFov = Math.max(vFov, hFov) * 0.5 + cullPadding;
+    cullCos = Math.cos(maxHalfFov);
+  }
+  const isBlockVisible = (center, hasOccluder) => {
+    if (hasOccluder || cullDistance <= 0) {
+      return true;
+    }
+    const dx = center.x - cullPos.x;
+    const dy = center.y - cullPos.y;
+    const dz = center.z - cullPos.z;
+    const distSq = dx * dx + dy * dy + dz * dz;
+    if (distSq > cullDistance * cullDistance) {
+      return false;
+    }
+    if (cullCos === null) {
+      return true;
+    }
+    const dist = Math.sqrt(distSq);
+    if (dist <= 1e-6) {
+      return true;
+    }
+    const dot = (dx * viewDir.x + dy * viewDir.y + dz * viewDir.z) / dist;
+    return dot >= cullCos;
+  };
   const occluderBlocks = [];
   const spriteDraws = [];
 
@@ -134,13 +183,15 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
     const worldPos = Game.utils.gameToWorld(center);
 
     if (worldRef.components.StaticBlock.has(entity)) {
-      const staticBlock = worldRef.components.StaticBlock.get(entity);
       const cellX = Math.floor(transform.pos.x);
       const cellY = Math.floor(transform.pos.y);
       const cellZ = Math.floor(transform.pos.z);
       const occluderAlpha = occluderMap.get(
         Game.utils.blockKey(cellX, cellY, cellZ)
       );
+      if (!isBlockVisible(center, occluderAlpha !== undefined)) {
+        continue;
+      }
       if (occluderAlpha !== undefined) {
         occluderBlocks.push({
           worldPos,
@@ -150,12 +201,11 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
         });
         continue;
       }
-      Game.rendering.drawBlockWithVertexAO(
+      Game.rendering.drawBlockFaces(
         worldRef,
         transform,
         collider,
         renderable,
-        staticBlock,
         cellX,
         cellY,
         cellZ
@@ -314,8 +364,10 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
     }
   }
 
-  Game.systems.drawEditorSelection?.(worldRef);
-  Game.systems.drawEditorHover?.(worldRef);
+  if (Game.debug?.mode > 0) {
+    Game.systems.drawEditorSelection?.(worldRef);
+    Game.systems.drawEditorHover?.(worldRef);
+  }
 
   Game.systems.drawPaintingLoadingIndicators(worldRef, cameraWorld, renderState);
 
@@ -408,200 +460,11 @@ Game.rendering.blockFaceDefs = [
   },
 ];
 
-Game.rendering.getBlockVertexSign = function getBlockVertexSign(axis, vert) {
-  if (axis === "x") {
-    return vert.sx >= 0 ? 1 : -1;
-  }
-  if (axis === "y") {
-    return vert.sy >= 0 ? -1 : 1;
-  }
-  return vert.sz >= 0 ? 1 : -1;
-};
-
-Game.rendering.getBlockVertexAoShade = function getBlockVertexAoShade(
-  worldRef,
-  cellX,
-  cellY,
-  cellZ,
-  plane,
-  axisU,
-  axisV,
-  signU,
-  signV
-) {
-  const rendering = worldRef?.resources?.rendering;
-  if (rendering && rendering.blockAoEnabled === false) {
-    return 1;
-  }
-  const step = rendering?.blockAoStep ?? 0.12;
-  const minShade = rendering?.blockAoMin ?? 0.55;
-  const axisOffset = (axis, sign) => {
-    if (axis === "x") {
-      return { x: sign, y: 0, z: 0 };
-    }
-    if (axis === "y") {
-      return { x: 0, y: sign, z: 0 };
-    }
-    return { x: 0, y: 0, z: sign };
-  };
-  const sideU = axisOffset(axisU, signU);
-  const sideV = axisOffset(axisV, signV);
-  const corner = {
-    x: sideU.x + sideV.x,
-    y: sideU.y + sideV.y,
-    z: sideU.z + sideV.z,
-  };
-  const isSolid = (offset) =>
-    Game.utils.isBlockAt(
-      worldRef,
-      cellX + plane.x + offset.x,
-      cellY + plane.y + offset.y,
-      cellZ + plane.z + offset.z
-    );
-  const occU = isSolid(sideU);
-  const occV = isSolid(sideV);
-  const occCorner = isSolid(corner);
-  const count =
-    occU && occV
-      ? 3
-      : (occU ? 1 : 0) + (occV ? 1 : 0) + (occCorner ? 1 : 0);
-  const shade = 1 - count * step;
-  return Math.max(minShade, shade);
-};
-
-Game.rendering.computeBlockAoCache = function computeBlockAoCache(
-  worldRef,
-  cellX,
-  cellY,
-  cellZ
-) {
-  const faces = Game.rendering.blockFaceDefs;
-  const ao = new Float32Array(faces.length * 4);
-  const rendering = worldRef?.resources?.rendering;
-  if (rendering && rendering.blockAoEnabled === false) {
-    ao.fill(1);
-    return ao;
-  }
-  let index = 0;
-  for (const face of faces) {
-    for (const vert of face.verts) {
-      const signU = Game.rendering.getBlockVertexSign(face.axisU, vert);
-      const signV = Game.rendering.getBlockVertexSign(face.axisV, vert);
-      ao[index] = Game.rendering.getBlockVertexAoShade(
-        worldRef,
-        cellX,
-        cellY,
-        cellZ,
-        face.plane,
-        face.axisU,
-        face.axisV,
-        signU,
-        signV
-      );
-      index += 1;
-    }
-  }
-  return ao;
-};
-
-Game.rendering.ensureBlockAoCache = function ensureBlockAoCache(
-  worldRef,
-  staticBlock,
-  cellX,
-  cellY,
-  cellZ
-) {
-  if (!staticBlock) {
-    return null;
-  }
-  const expected = Game.rendering.blockFaceDefs.length * 4;
-  if (
-    !staticBlock.ao ||
-    staticBlock.ao.length !== expected ||
-    staticBlock.aoDirty
-  ) {
-    staticBlock.ao = Game.rendering.computeBlockAoCache(
-      worldRef,
-      cellX,
-      cellY,
-      cellZ
-    );
-    staticBlock.aoDirty = false;
-  }
-  return staticBlock.ao;
-};
-
-Game.rendering.markBlockAoDirtyAt = function markBlockAoDirtyAt(
-  worldRef,
-  cellX,
-  cellY,
-  cellZ
-) {
-  const key = Game.utils.blockKey(cellX, cellY, cellZ);
-  const entity = worldRef?.resources?.blockIndex?.get(key);
-  if (!entity) {
-    return;
-  }
-  const block = worldRef.components?.StaticBlock?.get(entity);
-  if (!block) {
-    return;
-  }
-  block.aoDirty = true;
-  worldRef.components.StaticBlock.set(entity, block);
-};
-
-Game.rendering.markBlockAoDirtyAround = function markBlockAoDirtyAround(
-  worldRef,
-  cellX,
-  cellY,
-  cellZ
-) {
-  if (!worldRef?.resources?.blockIndex) {
-    return;
-  }
-  for (let dy = -1; dy <= 1; dy += 1) {
-    for (let dz = -1; dz <= 1; dz += 1) {
-      for (let dx = -1; dx <= 1; dx += 1) {
-        Game.rendering.markBlockAoDirtyAt(
-          worldRef,
-          cellX + dx,
-          cellY + dy,
-          cellZ + dz
-        );
-      }
-    }
-  }
-};
-
-Game.rendering.rebuildBlockAoCache = function rebuildBlockAoCache(worldRef) {
-  if (!worldRef?.components?.StaticBlock) {
-    return;
-  }
-  for (const [entity, block] of worldRef.components.StaticBlock.entries()) {
-    const transform = worldRef.components.Transform.get(entity);
-    if (!transform?.pos) {
-      continue;
-    }
-    const cellX = Math.floor(transform.pos.x);
-    const cellY = Math.floor(transform.pos.y);
-    const cellZ = Math.floor(transform.pos.z);
-    block.ao = Game.rendering.computeBlockAoCache(
-      worldRef,
-      cellX,
-      cellY,
-      cellZ
-    );
-    block.aoDirty = false;
-    worldRef.components.StaticBlock.set(entity, block);
-  }
-};
-
-Game.rendering.drawBlockWithVertexAO = function drawBlockWithVertexAO(
+Game.rendering.drawBlockFaces = function drawBlockFaces(
   worldRef,
   transform,
   collider,
   renderable,
-  staticBlock,
   cellX,
   cellY,
   cellZ
@@ -629,40 +492,18 @@ Game.rendering.drawBlockWithVertexAO = function drawBlockWithVertexAO(
   const isBlock = (dx, dy, dz) =>
     Game.utils.isBlockAt(worldRef, blockX + dx, blockY + dy, blockZ + dz);
   const faces = Game.rendering.blockFaceDefs;
-  const cachedAo = Game.rendering.ensureBlockAoCache(
-    worldRef,
-    staticBlock,
-    blockX,
-    blockY,
-    blockZ
-  );
 
   push();
   translate(worldPos.x, worldPos.y, worldPos.z);
   noStroke();
-  for (let faceIndex = 0; faceIndex < faces.length; faceIndex += 1) {
-    const face = faces[faceIndex];
+  for (const face of faces) {
     if (isBlock(face.plane.x, face.plane.y, face.plane.z)) {
       continue;
     }
     beginShape(QUADS);
     normal(face.normal[0], face.normal[1], face.normal[2]);
-    for (let vertIndex = 0; vertIndex < face.verts.length; vertIndex += 1) {
-      const vert = face.verts[vertIndex];
-      const shade = cachedAo
-        ? cachedAo[faceIndex * 4 + vertIndex]
-        : Game.rendering.getBlockVertexAoShade(
-            worldRef,
-            blockX,
-            blockY,
-            blockZ,
-            face.plane,
-            face.axisU,
-            face.axisV,
-            Game.rendering.getBlockVertexSign(face.axisU, vert),
-            Game.rendering.getBlockVertexSign(face.axisV, vert)
-          );
-      fill(base[0] * shade, base[1] * shade, base[2] * shade);
+    fill(base[0], base[1], base[2]);
+    for (const vert of face.verts) {
       vertex(vert.sx * halfX, vert.sy * halfY, vert.sz * halfZ);
     }
     endShape();
