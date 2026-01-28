@@ -359,6 +359,9 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
         0
       );
       Game.systems.setCameraState(worldRef, pos, lookAt);
+      if (worldRef.resources?.cameraState) {
+        worldRef.resources.cameraState.pushIn = 0;
+      }
       worldRef.components.Transform.set(cameraId, cameraTransform);
       return;
     }
@@ -449,6 +452,9 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
       smooth
     );
     Game.systems.setCameraState(worldRef, cameraTransform.pos, smoothedCenter);
+    if (worldRef.resources?.cameraState) {
+      worldRef.resources.cameraState.pushIn = 0;
+    }
     worldRef.components.Transform.set(cameraId, cameraTransform);
     return;
   }
@@ -604,6 +610,9 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
       0
     );
     Game.systems.setCameraState(worldRef, cameraTransform.pos, lookAt);
+    if (worldRef.resources?.cameraState) {
+      worldRef.resources.cameraState.pushIn = 0;
+    }
     worldRef.components.Transform.set(cameraId, cameraTransform);
     return;
   }
@@ -735,6 +744,18 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
       rig
     );
     const adjusted = avoidResult?.pos || desired;
+    const desiredDist = Math.hypot(
+      desired.x - lookAt.x,
+      desired.y - lookAt.y,
+      desired.z - lookAt.z
+    );
+    const adjustedDist = Math.hypot(
+      adjusted.x - lookAt.x,
+      adjusted.y - lookAt.y,
+      adjusted.z - lookAt.z
+    );
+    const pushIn =
+      desiredDist > 1e-4 ? Math.max(0, desiredDist - adjustedDist) : 0;
     if (rig) {
       rig.avoidOffsetY = avoidResult?.offsetY ?? 0;
       worldRef.components.CameraRig.set(entity, rig);
@@ -772,6 +793,9 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
     );
     if (entity === cameraId) {
       Game.systems.setCameraState(worldRef, activeCameraTransform.pos, lookAt);
+      if (worldRef.resources?.cameraState) {
+        worldRef.resources.cameraState.pushIn = pushIn;
+      }
     }
     worldRef.components.Transform.set(entity, activeCameraTransform);
   }

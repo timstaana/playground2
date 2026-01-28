@@ -360,6 +360,7 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
     }
   }
   const cameraState = worldRef.resources.cameraState;
+  const cameraPushIn = cameraState?.pushIn ?? 0;
   if (cameraState?.pos && cameraState?.lookAt) {
     const dir = {
       x: cameraState.lookAt.x - cameraState.pos.x,
@@ -553,6 +554,12 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
         const horiz = Math.hypot(toCamWorld.x, toCamWorld.z);
         billboardYaw = Math.atan2(toCamWorld.x, toCamWorld.z);
         billboardPitch = Math.atan2(toCamWorld.y, horiz || 1);
+      }
+      if (
+        cameraPushIn > 0.05 &&
+        worldRef.components.Player.has(entity)
+      ) {
+        billboardPitch = 0;
       }
       const depth =
         (center.x - cameraPos.x) * viewDir.x +
