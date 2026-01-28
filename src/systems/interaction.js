@@ -105,34 +105,6 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
     return;
   }
 
-  const cameraTransform = cameraId
-    ? worldRef.components.Transform.get(cameraId)
-    : null;
-  const cameraPos =
-    worldRef.resources?.cameraState?.pos || cameraTransform?.pos || null;
-  if (cameraPos) {
-    const toCam = {
-      x: cameraPos.x - playerTransform.pos.x,
-      z: cameraPos.z - playerTransform.pos.z,
-    };
-    const toCamLen = Math.hypot(toCam.x, toCam.z);
-    if (toCamLen > 1e-4) {
-      const playerForward = {
-        x: Math.sin(playerTransform.rotY),
-        z: -Math.cos(playerTransform.rotY),
-      };
-      const dot =
-        (toCam.x / toCamLen) * playerForward.x +
-        (toCam.z / toCamLen) * playerForward.z;
-      if (dot > 0) {
-        Game.systems.setInteractionFocus(worldRef, null);
-        inputState.clickRequested = false;
-        inputState.clickPosition = null;
-        return;
-      }
-    }
-  }
-
   const spacePressed = !!inputState.spacePressed;
   const clickRequested = !!inputState.clickRequested;
   const touchJumpPressed = !!inputState.touchJumpPressed;
@@ -177,6 +149,34 @@ Game.systems.interactionSystem = function interactionSystem(worldRef) {
     inputState.clickRequested = false;
     inputState.clickPosition = null;
     return;
+  }
+
+  const cameraTransform = cameraId
+    ? worldRef.components.Transform.get(cameraId)
+    : null;
+  const cameraPos =
+    worldRef.resources?.cameraState?.pos || cameraTransform?.pos || null;
+  if (cameraPos) {
+    const toCam = {
+      x: cameraPos.x - playerTransform.pos.x,
+      z: cameraPos.z - playerTransform.pos.z,
+    };
+    const toCamLen = Math.hypot(toCam.x, toCam.z);
+    if (toCamLen > 1e-4) {
+      const playerForward = {
+        x: Math.sin(playerTransform.rotY),
+        z: -Math.cos(playerTransform.rotY),
+      };
+      const dot =
+        (toCam.x / toCamLen) * playerForward.x +
+        (toCam.z / toCamLen) * playerForward.z;
+      if (dot > 0) {
+        Game.systems.setInteractionFocus(worldRef, null);
+        inputState.clickRequested = false;
+        inputState.clickPosition = null;
+        return;
+      }
+    }
   }
 
   const nearest = Game.systems.scanInteractionTargets(
