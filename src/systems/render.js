@@ -323,41 +323,152 @@ Game.rendering.isChunkVisible = function isChunkVisible(
   return dot >= Math.cos(maxAngle);
 };
 
-Game.systems.drawPlayerShadow = function drawPlayerShadow(worldRef) {
-  if (!worldRef?.resources?.blockSet || typeof createGraphics !== "function") {
+Game.systems.buildShadowUniforms = function buildShadowUniforms(
+  worldRef,
+  cameraPos,
+  rendering
+) {
+  if (!worldRef) {
+    return { count: 0, data: null, strength: 0, fade: 0, normalMin: 0.5 };
+  }
+  const grid = Game.config.gridSize;
+  const maxCasters = Math.min(rendering?.shadowMaxCasters ?? 12, 12);
+  const radiusScale = rendering?.shadowRadiusScale ?? 0.45;
+  const fadeOut = rendering?.shadowFade ?? 3;
+  const strength = rendering?.shadowStrength ?? 0.35;
+  const normalMin = rendering?.shadowNormalMin ?? 0.6;
+  const forwardOffset = rendering?.shadowForwardOffset ?? 0.12;
+  const shadowCullDistance = rendering?.shadowCullDistance ?? 0;
+
+  const casters = [];
+  const addCaster = (entity) => {
+    if (!entity) {
+      return;
+    }
+    const transform = worldRef.components.Transform.get(entity);
+    const collider = worldRef.components.Collider.get(entity);
+    if (!transform || !collider) {
+      return;
+    }
+    if (shadowCullDistance > 0 && cameraPos) {
+      const dx = transform.pos.x - cameraPos.x;
+      const dy = transform.pos.y - cameraPos.y;
+      const dz = transform.pos.z - cameraPos.z;
+      if (
+        dx * dx + dy * dy + dz * dz >
+        shadowCullDistance * shadowCullDistance
+      ) {
+        return;
+      }
+    }
+    const yaw = Number.isFinite(transform.rotY) ? transform.rotY : 0;
+    const forward = { x: Math.sin(yaw), z: -Math.cos(yaw) };
+    const shadowPosX = transform.pos.x + forward.x * forwardOffset;
+    const shadowPosZ = transform.pos.z + forward.z * forwardOffset;
+    const radius = Math.min(collider.w, collider.d) * radiusScale * grid;
+    if (radius <= 0) {
+      return;
+    }
+    let distSq = 0;
+    if (cameraPos) {
+      const dx = transform.pos.x - cameraPos.x;
+      const dy = transform.pos.y - cameraPos.y;
+      const dz = transform.pos.z - cameraPos.z;
+      distSq = dx * dx + dy * dy + dz * dz;
+    }
+    casters.push({
+      x: shadowPosX * grid,
+      y: -transform.pos.y * grid,
+      z: shadowPosZ * grid,
+      r: radius,
+      distSq,
+    });
+  };
+
+  const playerId = worldRef.resources?.playerId;
+  if (playerId) {
+    addCaster(playerId);
+  }
+  for (const [entity] of worldRef.components.NPC.entries()) {
+    addCaster(entity);
+  }
+  for (const [entity] of worldRef.components.RemotePlayer.entries()) {
+    addCaster(entity);
+  }
+
+  if (casters.length === 0 || maxCasters <= 0) {
+    return {
+      count: 0,
+      data: null,
+      strength,
+      fade: fadeOut * grid,
+      normalMin,
+    };
+  }
+  if (cameraPos && casters.length > 1) {
+    casters.sort((a, b) => a.distSq - b.distSq);
+  }
+  const count = Math.min(maxCasters, casters.length);
+  const total = maxCasters * 4;
+  if (!Game.rendering.shadowData || Game.rendering.shadowData.length !== total) {
+    Game.rendering.shadowData = new Float32Array(total);
+  }
+  const data = Game.rendering.shadowData;
+  data.fill(0);
+  for (let i = 0; i < count; i += 1) {
+    const caster = casters[i];
+    const offset = i * 4;
+    data[offset] = caster.x;
+    data[offset + 1] = caster.y;
+    data[offset + 2] = caster.z;
+    data[offset + 3] = caster.r;
+  }
+
+  return {
+    count,
+    data,
+    strength,
+    fade: fadeOut * grid,
+    normalMin,
+  };
+};
+
+Game.systems.collectEntityShadow = function collectEntityShadow(
+  worldRef,
+  entity,
+  shadowMap
+) {
+  if (!worldRef?.resources?.blockSet || !shadowMap) {
     return;
   }
-  const playerId = worldRef.resources.playerId;
-  if (!playerId) {
+  if (!entity) {
     return;
   }
-  const transform = worldRef.components.Transform.get(playerId);
-  const collider = worldRef.components.Collider.get(playerId);
+  const transform = worldRef.components.Transform.get(entity);
+  const collider = worldRef.components.Collider.get(entity);
   if (!transform || !collider) {
     return;
   }
 
-  const size = Game.config.gridSize;
-  const radius = Math.min(collider.w, collider.d) * 0.35;
-  const maxDrop = 4;
-  const fadeOut = 3;
+  const rendering = worldRef.resources?.rendering || {};
+  const maxDrop = rendering.shadowMaxDrop ?? 4;
+  const fadeOut = rendering.shadowFade ?? 3;
+  const strength = rendering.shadowStrength ?? 0.28;
+  const radiusScale = rendering.shadowRadiusScale ?? 0.45;
+  const forwardOffset = 0;
 
-  const minX = Math.floor(transform.pos.x - radius - 0.5);
-  const maxX = Math.floor(transform.pos.x + radius + 0.5);
-  const minZ = Math.floor(transform.pos.z - radius - 0.5);
-  const maxZ = Math.floor(transform.pos.z + radius + 0.5);
+  const yaw = Number.isFinite(transform.rotY) ? transform.rotY : 0;
+  const forward = { x: Math.sin(yaw), z: -Math.cos(yaw) };
+  const shadowPos = {
+    x: transform.pos.x + forward.x * forwardOffset,
+    z: transform.pos.z + forward.z * forwardOffset,
+  };
+  const radius = Math.min(collider.w, collider.d) * radiusScale;
+  const minX = Math.floor(shadowPos.x - radius - 0.5);
+  const maxX = Math.floor(shadowPos.x + radius + 0.5);
+  const minZ = Math.floor(shadowPos.z - radius - 0.5);
+  const maxZ = Math.floor(shadowPos.z + radius + 0.5);
   const startY = Math.floor(transform.pos.y - 0.001);
-
-  if (
-    !Game.rendering.playerShadowGfx ||
-    Game.rendering.playerShadowGfx.width !== size
-  ) {
-    Game.rendering.playerShadowGfx = createGraphics(size, size);
-    Game.rendering.playerShadowGfx.pixelDensity(1);
-  }
-  const gfx = Game.rendering.playerShadowGfx;
-
-  blendMode(BLEND);
 
   for (let y = startY; y >= startY - maxDrop; y -= 1) {
     for (let x = minX; x <= maxX; x += 1) {
@@ -374,41 +485,83 @@ Game.systems.drawPlayerShadow = function drawPlayerShadow(worldRef) {
           continue;
         }
 
-        const dx = Math.max(Math.abs(transform.pos.x - (x + 0.5)) - 0.5, 0);
-        const dz = Math.max(Math.abs(transform.pos.z - (z + 0.5)) - 0.5, 0);
+        const dx = Math.max(Math.abs(shadowPos.x - (x + 0.5)) - 0.5, 0);
+        const dz = Math.max(Math.abs(shadowPos.z - (z + 0.5)) - 0.5, 0);
         if (dx * dx + dz * dz > radius * radius) {
           continue;
         }
 
-        const alpha = Math.floor(120 * (1 - drop / fadeOut));
-        const centerX = size * 0.5 + (transform.pos.x - (x + 0.5)) * size;
-        const centerY = size * 0.5 + (transform.pos.z - (z + 0.5)) * size;
-        gfx.clear();
-        gfx.noStroke();
-        gfx.fill(0, 0, 0, alpha);
-        gfx.ellipse(
-          centerX,
-          centerY,
-          radius * 2 * size,
-          radius * 2 * size
-        );
-
-        const worldPos = Game.utils.gameToWorld({
-          x: x + 0.5,
-          y: topY + 0.0025,
-          z: z + 0.5,
+        const alpha = Math.floor(255 * strength * (1 - drop / fadeOut));
+        if (alpha <= 0) {
+          continue;
+        }
+        const key = Game.utils.blockKey(x, y, z);
+        let entry = shadowMap.get(key);
+        if (!entry) {
+          entry = { x, y, z, topY, shadows: [] };
+          shadowMap.set(key, entry);
+        }
+        entry.shadows.push({
+          centerX: shadowPos.x - (x + 0.5),
+          centerZ: shadowPos.z - (z + 0.5),
+          radius,
+          alpha,
         });
-        push();
-        translate(worldPos.x, worldPos.y, worldPos.z);
-        rotateX(Math.PI / 2);
-        noStroke();
-        texture(gfx);
-        plane(size, size);
-        pop();
       }
     }
   }
+};
 
+Game.systems.drawShadowMap = function drawShadowMap(worldRef, shadowMap) {
+  if (!shadowMap || shadowMap.size === 0 || typeof createGraphics !== "function") {
+    return;
+  }
+  const size = Game.config.gridSize;
+  const half = size * 0.5;
+  blendMode(BLEND);
+  textureMode(NORMAL);
+  noStroke();
+  if (!Game.rendering.shadowMaskGfx) {
+    Game.rendering.shadowMaskGfx = createGraphics(64, 64);
+    Game.rendering.shadowMaskGfx.pixelDensity(1);
+  }
+  const gfx = Game.rendering.shadowMaskGfx;
+  gfx.clear();
+  gfx.noStroke();
+  if (typeof gfx.blendMode === "function") {
+    gfx.blendMode(BLEND);
+  }
+
+  for (const entry of shadowMap.values()) {
+    gfx.clear();
+    for (const shadow of entry.shadows) {
+      const cx = gfx.width * 0.5 + shadow.centerX * gfx.width;
+      const cz = gfx.height * 0.5 + shadow.centerZ * gfx.height;
+      const r = shadow.radius * gfx.width;
+      gfx.fill(255, 255, 255, shadow.alpha);
+      gfx.ellipse(cx, cz, r * 2, r * 2);
+    }
+    const worldPos = Game.utils.gameToWorld({
+      x: entry.x + 0.5,
+      y: entry.topY + 0.0025,
+      z: entry.z + 0.5,
+    });
+    push();
+    translate(worldPos.x, worldPos.y, worldPos.z);
+    rotateX(Math.PI / 2);
+    texture(gfx);
+    tint(0, 0, 0, 255);
+    beginShape();
+    vertex(-half, -half, 0, 0, 0);
+    vertex(half, -half, 0, 1, 0);
+    vertex(half, half, 0, 1, 1);
+    vertex(-half, half, 0, 0, 1);
+    endShape(CLOSE);
+    pop();
+  }
+
+  noTint();
+  textureMode(IMAGE);
   Game.rendering.clearTexture();
 };
 
@@ -469,7 +622,7 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
   };
   const insideBlock =
     Game.utils.isBlockAt(worldRef, cameraCell.x, cameraCell.y, cameraCell.z);
-  const cutoutEnabled = rendering?.cameraCutout !== false;
+  const cutoutEnabled = false;
   const cutActive = cutoutEnabled && insideBlock;
   const cutDepth =
     typeof rendering?.cameraCutoutDepth === "number"
@@ -483,32 +636,60 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
     typeof rendering?.cameraCutoutNormalY === "number"
       ? rendering.cameraCutoutNormalY
       : 0.4;
-  const ditherScale =
-    typeof rendering?.cameraCutoutDitherScale === "number"
-      ? rendering.cameraCutoutDitherScale
-      : 1;
   const cullDistance = rendering?.blockCullDistance ?? 0;
   const cullPadding = rendering?.blockCullFovPadding ?? 0;
   const chunkSize = rendering?.blockChunkSize ?? 0;
   const cullPos = cameraState?.pos || cameraPos;
+  const vFov = cameraState?.fov ?? Math.PI / 3;
+  const aspect =
+    cameraState?.aspect ||
+    (typeof width === "number" && typeof height === "number" && height > 0
+      ? width / height
+      : 1);
   let cullCos = null;
   let cullAngle = null;
   if (cullDistance > 0) {
-    const vFov = cameraState?.fov ?? Math.PI / 3;
-    const aspect =
-      cameraState?.aspect ||
-      (typeof width === "number" && typeof height === "number" && height > 0
-        ? width / height
-        : 1);
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
     const maxHalfFov = Math.max(vFov, hFov) * 0.5 + cullPadding;
     cullCos = Math.cos(maxHalfFov);
     const clamped = Math.max(-1, Math.min(1, cullCos));
     cullAngle = Math.acos(clamped);
   }
+  const spriteCullDistance =
+    typeof rendering?.spriteCullDistance === "number"
+      ? rendering.spriteCullDistance
+      : cullDistance;
+  const spriteCullPadding =
+    typeof rendering?.spriteCullFovPadding === "number"
+      ? rendering.spriteCullFovPadding
+      : cullPadding;
+  let spriteCullCos = null;
+  let spriteCullAngle = null;
+  if (spriteCullDistance > 0) {
+    if (
+      spriteCullDistance === cullDistance &&
+      spriteCullPadding === cullPadding
+    ) {
+      spriteCullCos = cullCos;
+      spriteCullAngle = cullAngle;
+    } else {
+      const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+      const maxHalfFov = Math.max(vFov, hFov) * 0.5 + spriteCullPadding;
+      spriteCullCos = Math.cos(maxHalfFov);
+      const clamped = Math.max(-1, Math.min(1, spriteCullCos));
+      spriteCullAngle = Math.acos(clamped);
+    }
+  }
   const spriteDraws = [];
 
   if (chunkSize > 0) {
+    const gl = drawingContext;
+    if (gl && typeof gl.enable === "function") {
+      gl.enable(gl.CULL_FACE);
+      if (typeof gl.cullFace === "function") {
+        gl.cullFace(gl.FRONT);
+      }
+    }
     if (!rendering.blockChunks) {
       Game.rendering.rebuildAllBlockChunks(worldRef);
     }
@@ -516,11 +697,11 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
     const useBlockShader = !!blockShader && cutActive;
     if (useBlockShader) {
       shader(blockShader);
-      blockShader.setUniform("uCutEnabled", 1);
+      blockShader.setUniform("uCutEnabled", cutActive ? 1 : 0);
       blockShader.setUniform("uCutDepth", cutDepth);
       blockShader.setUniform("uCutFade", cutFade);
       blockShader.setUniform("uCutNormalY", cutNormalY);
-      blockShader.setUniform("uDitherScale", ditherScale);
+      blockShader.setUniform("uShadowCount", 0);
     }
     const removeKeys = [];
     for (const [key, chunk] of rendering.blockChunks || []) {
@@ -591,9 +772,33 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
     if (useBlockShader) {
       resetShader();
     }
+    if (gl && typeof gl.disable === "function") {
+      gl.disable(gl.CULL_FACE);
+    }
   }
 
-  Game.systems.drawPlayerShadow?.(worldRef);
+  const shadowTargets = new Set();
+  if (worldRef.resources.playerId) {
+    shadowTargets.add(worldRef.resources.playerId);
+  }
+  for (const [entity] of worldRef.components.NPC.entries()) {
+    shadowTargets.add(entity);
+  }
+  for (const [entity] of worldRef.components.RemotePlayer.entries()) {
+    shadowTargets.add(entity);
+  }
+  if (shadowTargets.size > 0) {
+    const shadowMap = new Map();
+    for (const entity of shadowTargets) {
+      Game.systems.collectEntityShadow?.(worldRef, entity, shadowMap);
+    }
+    if (shadowMap.size > 0) {
+      blendMode(BLEND);
+      noLights();
+      Game.rendering.clearTexture();
+      Game.systems.drawShadowMap?.(worldRef, shadowMap);
+    }
+  }
 
   for (const [entity, renderable] of worldRef.components.Renderable.entries()) {
     const transform = worldRef.components.Transform.get(entity);
@@ -607,6 +812,28 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
 
     const sprite = worldRef.components.BillboardSprite.get(entity);
     if (sprite) {
+      const spriteOffsetY = sprite.offsetY ?? collider.h / 2;
+      if (spriteCullDistance > 0) {
+        const spriteCenter = {
+          x: transform.pos.x,
+          y: transform.pos.y + spriteOffsetY,
+          z: transform.pos.z,
+        };
+        const spriteRadius =
+          Math.max(collider.w, collider.h, collider.d) * 0.5;
+        if (
+          !Game.rendering.isChunkVisible(
+            { center: spriteCenter, radius: spriteRadius },
+            cullPos,
+            viewDir,
+            spriteCullDistance,
+            spriteCullCos,
+            spriteCullAngle
+          )
+        ) {
+          continue;
+        }
+      }
       const vel = worldRef.components.Velocity.get(entity);
       const horizontalSpeed = vel ? Math.hypot(vel.x, vel.z) : 0;
       const isMoving = horizontalSpeed > 0.01;
@@ -627,13 +854,17 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
       const textureKey = isFront ? sprite.front : sprite.back;
       const spriteTex = worldRef.resources.textures[textureKey];
       const tex = spriteTex ? spriteTex.texture : null;
-
-      const center = {
+      const isPlayer = worldRef.components.Player.has(entity);
+      const isRemotePlayer = worldRef.components.RemotePlayer.has(entity);
+      const isNpc = worldRef.components.NPC.has(entity);
+      const isCharacter = isPlayer || isRemotePlayer || isNpc;
+      const anchorAtFeet = isNpc || isRemotePlayer;
+      const anchorCenter = {
         x: transform.pos.x,
-        y: transform.pos.y + sprite.offsetY,
+        y: transform.pos.y + (anchorAtFeet ? 0 : spriteOffsetY),
         z: transform.pos.z,
       };
-      const worldPos = Game.utils.gameToWorld(center);
+      const worldPos = Game.utils.gameToWorld(anchorCenter);
       let billboardYaw = transform.rotY;
       let billboardPitch = sprite.pitch ?? 0;
       if (sprite.billboard !== false) {
@@ -645,17 +876,27 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
         const horiz = Math.hypot(toCamWorld.x, toCamWorld.z);
         billboardYaw = Math.atan2(toCamWorld.x, toCamWorld.z);
         billboardPitch = Math.atan2(toCamWorld.y, horiz || 1);
+        billboardPitch = -billboardPitch;
       }
-      if (
-        cameraPushIn > 0.05 &&
-        worldRef.components.Player.has(entity)
-      ) {
+      if (isCharacter) {
         billboardPitch = 0;
+        if ("cameraPitch" in sprite) {
+          delete sprite.cameraPitch;
+          worldRef.components.BillboardSprite.set(entity, sprite);
+        }
       }
+      const depthCenter = {
+        x: transform.pos.x,
+        y: transform.pos.y + spriteOffsetY,
+        z: transform.pos.z,
+      };
       const depth =
-        (center.x - cameraPos.x) * viewDir.x +
-        (center.y - cameraPos.y) * viewDir.y +
-        (center.z - cameraPos.z) * viewDir.z;
+        (depthCenter.x - cameraPos.x) * viewDir.x +
+        (depthCenter.y - cameraPos.y) * viewDir.y +
+        (depthCenter.z - cameraPos.z) * viewDir.z;
+      const anchorOffsetY = anchorAtFeet
+        ? spriteOffsetY * Game.config.gridSize
+        : 0;
 
       if (spriteTex && Game.rendering.isValidTexture(tex)) {
         const isPainting = worldRef.components.Painting.has(entity);
@@ -674,6 +915,7 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
           worldPos,
           billboardYaw,
           billboardPitch,
+          anchorOffsetY,
           isMoving: shouldAnimate,
           outline,
           isPainting,
@@ -736,6 +978,9 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
       translate(draw.worldPos.x, draw.worldPos.y, draw.worldPos.z);
       rotateY(draw.billboardYaw);
       rotateX(draw.billboardPitch);
+      if (draw.anchorOffsetY) {
+        translate(0, -draw.anchorOffsetY, 0);
+      }
       Game.rendering.updateSpriteTexture(
         draw.spriteTex,
         draw.sprite.fps,
@@ -844,10 +1089,10 @@ Game.rendering.blockFaceDefs = [
     axisU: "y",
     axisV: "z",
     verts: [
-      { sx: 1, sy: -1, sz: -1 },
-      { sx: 1, sy: -1, sz: 1 },
-      { sx: 1, sy: 1, sz: 1 },
       { sx: 1, sy: 1, sz: -1 },
+      { sx: 1, sy: 1, sz: 1 },
+      { sx: 1, sy: -1, sz: 1 },
+      { sx: 1, sy: -1, sz: -1 },
     ],
   },
   {
@@ -857,10 +1102,10 @@ Game.rendering.blockFaceDefs = [
     axisU: "y",
     axisV: "z",
     verts: [
-      { sx: -1, sy: -1, sz: 1 },
-      { sx: -1, sy: -1, sz: -1 },
-      { sx: -1, sy: 1, sz: -1 },
       { sx: -1, sy: 1, sz: 1 },
+      { sx: -1, sy: 1, sz: -1 },
+      { sx: -1, sy: -1, sz: -1 },
+      { sx: -1, sy: -1, sz: 1 },
     ],
   },
   {
@@ -896,10 +1141,10 @@ Game.rendering.blockFaceDefs = [
     axisU: "x",
     axisV: "z",
     verts: [
-      { sx: -1, sy: -1, sz: 1 },
-      { sx: 1, sy: -1, sz: 1 },
-      { sx: 1, sy: -1, sz: -1 },
       { sx: -1, sy: -1, sz: -1 },
+      { sx: 1, sy: -1, sz: -1 },
+      { sx: 1, sy: -1, sz: 1 },
+      { sx: -1, sy: -1, sz: 1 },
     ],
   },
   {
@@ -909,10 +1154,10 @@ Game.rendering.blockFaceDefs = [
     axisU: "x",
     axisV: "z",
     verts: [
-      { sx: -1, sy: 1, sz: -1 },
-      { sx: 1, sy: 1, sz: -1 },
-      { sx: 1, sy: 1, sz: 1 },
       { sx: -1, sy: 1, sz: 1 },
+      { sx: 1, sy: 1, sz: 1 },
+      { sx: 1, sy: 1, sz: -1 },
+      { sx: -1, sy: 1, sz: -1 },
     ],
   },
 ];
@@ -1045,6 +1290,7 @@ Game.systems.drawPaintingLoadingIndicators =
         const horiz = Math.hypot(toCamWorld.x, toCamWorld.z);
         yaw = Math.atan2(toCamWorld.x, toCamWorld.z);
         pitch = Math.atan2(toCamWorld.y, horiz || 1);
+        pitch = -pitch;
       }
 
       const width = sprite.width ?? collider.w;

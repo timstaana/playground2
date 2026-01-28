@@ -12,4 +12,5 @@ Game.config = {
 Game.debug = {
   mode: 0,
   maxMode: 2,
+  showFps: true,
 };

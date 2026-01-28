@@ -73,10 +73,12 @@ uniform mat4 uModelViewMatrix;
 uniform mat4 uProjectionMatrix;
 varying float vViewDepth;
 varying vec3 vNormal;
+varying vec3 vWorldPos;
 void main() {
   vec4 viewPos = uModelViewMatrix * vec4(aPosition, 1.0);
   vViewDepth = -viewPos.z;
   vNormal = aNormal;
+  vWorldPos = aPosition;
   gl_Position = uProjectionMatrix * viewPos;
 }
 `;
@@ -88,39 +90,52 @@ uniform float uCutEnabled;
 uniform float uCutDepth;
 uniform float uCutFade;
 uniform float uCutNormalY;
-uniform float uDitherScale;
+#define MAX_SHADOWS 12
+uniform float uShadowCount;
+uniform vec4 uShadowData[MAX_SHADOWS];
+uniform float uShadowStrength;
+uniform float uShadowFade;
+uniform float uShadowNormalMin;
 varying float vViewDepth;
 varying vec3 vNormal;
-
-float bayer2(float x, float y) {
-  return x * (1.0 - y) * 2.0 + (1.0 - x) * y * 3.0 + x * y * 1.0;
-}
-
-float dither4x4(vec2 fragCoord, float scale) {
-  float safeScale = max(scale, 1.0);
-  vec2 coord = mod(floor(fragCoord / safeScale), 4.0);
-  float x = coord.x;
-  float y = coord.y;
-  float x0 = mod(x, 2.0);
-  float y0 = mod(y, 2.0);
-  float x1 = floor(x * 0.5);
-  float y1 = floor(y * 0.5);
-  float v = 4.0 * bayer2(x0, y0) + bayer2(x1, y1);
-  return v / 16.0;
-}
+varying vec3 vWorldPos;
 
 void main() {
   if (uCutEnabled > 0.5 && abs(vNormal.y) < uCutNormalY) {
     float d = uCutDepth - vViewDepth;
     if (d > 0.0) {
-      float fade = uCutFade > 0.0001 ? clamp(d / uCutFade, 0.0, 1.0) : 1.0;
-      float threshold = dither4x4(gl_FragCoord.xy, uDitherScale);
-      if (fade > threshold) {
+      float cutoff = uCutFade > 0.0001 ? uCutFade * 0.5 : 0.0;
+      if (d > cutoff) {
         discard;
       }
     }
   }
-  gl_FragColor = vec4(uColor, 1.0);
+  vec3 color = uColor;
+  if (uShadowCount > 0.5 && vNormal.y > uShadowNormalMin) {
+    float shadow = 0.0;
+    for (int i = 0; i < MAX_SHADOWS; i++) {
+      if (float(i) >= uShadowCount) {
+        break;
+      }
+      vec4 data = uShadowData[i];
+      float radius = data.w;
+      float drop = vWorldPos.y - data.y;
+      if (drop < 0.0 || drop > uShadowFade) {
+        continue;
+      }
+      vec2 delta = vWorldPos.xz - data.xz;
+      float dist = length(delta);
+      if (dist > radius) {
+        continue;
+      }
+      float edge = smoothstep(radius * 0.7, radius, dist);
+      float heightFade = 1.0 - clamp(drop / uShadowFade, 0.0, 1.0);
+      float strength = (1.0 - edge) * heightFade;
+      shadow = max(shadow, strength);
+    }
+    color *= 1.0 - shadow * uShadowStrength;
+  }
+  gl_FragColor = vec4(color, 1.0);
 }
 `;
 

@@ -531,8 +531,10 @@ Game.ui.updateEditorPanel = function updateEditorPanel(worldRef) {
 };
 
 Game.ui.renderDebugHud = function renderDebugHud(ctx) {
-  const debugMode = Game.debug?.mode ?? 0;
-  if (debugMode <= 0) {
+  const debug = Game.debug || {};
+  const debugMode = debug.mode ?? 0;
+  const showFps = debug.showFps ?? debugMode > 0;
+  if (!showFps) {
     return;
   }
   if (!ctx) {

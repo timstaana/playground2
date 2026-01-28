@@ -7,11 +7,7 @@
     "blockAoStrength": 0.5,
     "blockAoMin": 0.35,
     "blockAoPower": 1.6,
-    "cameraCutout": true,
-    "cameraCutoutDepth": 80,
-    "cameraCutoutFade": 8,
-    "cameraCutoutNormalY": 0.4,
-    "cameraCutoutDitherScale": 1
+    "cameraNear": 45
   },
   "paintingStreaming": {
     "loadRadius": 6,
@@ -1616,7 +1612,7 @@
       "backKey": "playerBack",
       "width": 1,
       "height": 1.5,
-      "offsetY": 0.7,
+      "offsetY": 0.75,
       "fps": 12,
       "idleFrame": 0,
       "alphaCutoff": 0.4

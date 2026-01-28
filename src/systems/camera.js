@@ -266,16 +266,57 @@ Game.systems.setCameraState = function setCameraState(
   if (!worldRef || !worldRef.resources) {
     return;
   }
+  const rendering = worldRef.resources.rendering || {};
   const aspect =
     typeof width === "number" && typeof height === "number" && height > 0
       ? width / height
       : 1;
+  const baseNear =
+    typeof rendering.cameraNear === "number" ? rendering.cameraNear : 0.1;
+  const baseFar =
+    typeof rendering.cameraFar === "number" ? rendering.cameraFar : 10000;
+  let near = baseNear;
+  if (rendering.cameraCutout !== false) {
+    const cell = {
+      x: Math.floor(pos.x),
+      y: Math.floor(pos.y),
+      z: Math.floor(pos.z),
+    };
+    const insideBlock = Game.utils.isBlockAt(
+      worldRef,
+      cell.x,
+      cell.y,
+      cell.z
+    );
+    if (insideBlock) {
+      const grid = Game.config.gridSize;
+      const distWorld =
+        Math.hypot(
+          pos.x - lookAt.x,
+          pos.y - lookAt.y,
+          pos.z - lookAt.z
+        ) * grid;
+      const clipMax =
+        typeof rendering.cameraCutoutDepth === "number"
+          ? rendering.cameraCutoutDepth
+          : grid * 2;
+      const safeMargin = grid;
+      const targetNear = Math.max(
+        baseNear,
+        Math.min(clipMax, distWorld - safeMargin)
+      );
+      near = targetNear;
+    }
+  }
   worldRef.resources.cameraState = {
     pos: { x: pos.x, y: pos.y, z: pos.z },
     lookAt: { x: lookAt.x, y: lookAt.y, z: lookAt.z },
     fov: worldRef.resources.cameraState?.fov ?? Math.PI / 3,
     aspect,
+    near,
+    far: baseFar,
   };
+  Game.systems.applyCameraPerspective(worldRef);
 };
 
 Game.systems.getFitDistanceForBounds =
@@ -320,8 +361,6 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
   if (!cameraTransform) {
     return;
   }
-
-  Game.systems.applyCameraPerspective(worldRef);
 
   const debugMode = Game.debug?.mode ?? 0;
   if (debugMode === 2) {

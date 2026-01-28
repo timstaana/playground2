@@ -76,6 +76,16 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
   worldRef.resources.rendering.blockCullFovPadding =
     renderingDef.blockCullFovPadding ??
     worldRef.resources.rendering.blockCullFovPadding;
+  worldRef.resources.rendering.spriteCullDistance =
+    typeof renderingDef.spriteCullDistance === "number"
+      ? renderingDef.spriteCullDistance
+      : worldRef.resources.rendering.spriteCullDistance ??
+        worldRef.resources.rendering.blockCullDistance;
+  worldRef.resources.rendering.spriteCullFovPadding =
+    typeof renderingDef.spriteCullFovPadding === "number"
+      ? renderingDef.spriteCullFovPadding
+      : worldRef.resources.rendering.spriteCullFovPadding ??
+        worldRef.resources.rendering.blockCullFovPadding;
   worldRef.resources.rendering.blockChunkSize =
     renderingDef.blockChunkSize ??
     renderingDef.chunkSize ??
@@ -92,6 +102,14 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     renderingDef.blockAoPower ??
     renderingDef.aoPower ??
     worldRef.resources.rendering.blockAoPower;
+  worldRef.resources.rendering.cameraNear =
+    typeof renderingDef.cameraNear === "number"
+      ? renderingDef.cameraNear
+      : worldRef.resources.rendering.cameraNear;
+  worldRef.resources.rendering.cameraFar =
+    typeof renderingDef.cameraFar === "number"
+      ? renderingDef.cameraFar
+      : worldRef.resources.rendering.cameraFar;
   worldRef.resources.rendering.cameraCutout =
     typeof renderingDef.cameraCutout === "boolean"
       ? renderingDef.cameraCutout

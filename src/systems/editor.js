@@ -400,6 +400,12 @@ Game.systems.exportLevelData = function exportLevelData(worldRef) {
   if (Number.isFinite(rendering.blockCullFovPadding)) {
     renderingOut.blockCullFovPadding = rendering.blockCullFovPadding;
   }
+  if (Number.isFinite(rendering.spriteCullDistance)) {
+    renderingOut.spriteCullDistance = rendering.spriteCullDistance;
+  }
+  if (Number.isFinite(rendering.spriteCullFovPadding)) {
+    renderingOut.spriteCullFovPadding = rendering.spriteCullFovPadding;
+  }
   if (Number.isFinite(rendering.blockChunkSize)) {
     renderingOut.blockChunkSize = rendering.blockChunkSize;
   }
@@ -411,6 +417,12 @@ Game.systems.exportLevelData = function exportLevelData(worldRef) {
   }
   if (Number.isFinite(rendering.blockAoPower)) {
     renderingOut.blockAoPower = rendering.blockAoPower;
+  }
+  if (Number.isFinite(rendering.cameraNear)) {
+    renderingOut.cameraNear = rendering.cameraNear;
+  }
+  if (Number.isFinite(rendering.cameraFar)) {
+    renderingOut.cameraFar = rendering.cameraFar;
   }
   if (typeof rendering.cameraCutout === "boolean") {
     renderingOut.cameraCutout = rendering.cameraCutout;
