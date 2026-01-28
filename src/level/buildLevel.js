@@ -92,6 +92,26 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     renderingDef.blockAoPower ??
     renderingDef.aoPower ??
     worldRef.resources.rendering.blockAoPower;
+  worldRef.resources.rendering.cameraCutout =
+    typeof renderingDef.cameraCutout === "boolean"
+      ? renderingDef.cameraCutout
+      : worldRef.resources.rendering.cameraCutout;
+  worldRef.resources.rendering.cameraCutoutDepth =
+    typeof renderingDef.cameraCutoutDepth === "number"
+      ? renderingDef.cameraCutoutDepth
+      : worldRef.resources.rendering.cameraCutoutDepth;
+  worldRef.resources.rendering.cameraCutoutFade =
+    typeof renderingDef.cameraCutoutFade === "number"
+      ? renderingDef.cameraCutoutFade
+      : worldRef.resources.rendering.cameraCutoutFade;
+  worldRef.resources.rendering.cameraCutoutNormalY =
+    typeof renderingDef.cameraCutoutNormalY === "number"
+      ? renderingDef.cameraCutoutNormalY
+      : worldRef.resources.rendering.cameraCutoutNormalY;
+  worldRef.resources.rendering.cameraCutoutDitherScale =
+    typeof renderingDef.cameraCutoutDitherScale === "number"
+      ? renderingDef.cameraCutoutDitherScale
+      : worldRef.resources.rendering.cameraCutoutDitherScale;
   const interactionDefaults = {
     range: interactionDef.range ?? 1.5,
     requireFacing: interactionDef.requireFacing ?? true,

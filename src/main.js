@@ -47,6 +47,7 @@ function setup() {
 
   renderState = {
     spriteShader: Game.rendering.createSpriteShader(),
+    blockShader: Game.rendering.createBlockShader(),
     uiFont: null,
   };
 

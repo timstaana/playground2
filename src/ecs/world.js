@@ -62,6 +62,11 @@ Game.ecs.createWorld = function createWorld() {
         blockAoStrength: 0.2,
         blockAoMin: 0.3,
         blockAoPower: 1.4,
+        cameraCutout: true,
+        cameraCutoutDepth: null,
+        cameraCutoutFade: null,
+        cameraCutoutNormalY: 0.4,
+        cameraCutoutDitherScale: 1,
       },
       paintingStreaming: {
         loadRadius: 6,

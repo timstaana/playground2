@@ -412,6 +412,21 @@ Game.systems.exportLevelData = function exportLevelData(worldRef) {
   if (Number.isFinite(rendering.blockAoPower)) {
     renderingOut.blockAoPower = rendering.blockAoPower;
   }
+  if (typeof rendering.cameraCutout === "boolean") {
+    renderingOut.cameraCutout = rendering.cameraCutout;
+  }
+  if (Number.isFinite(rendering.cameraCutoutDepth)) {
+    renderingOut.cameraCutoutDepth = rendering.cameraCutoutDepth;
+  }
+  if (Number.isFinite(rendering.cameraCutoutFade)) {
+    renderingOut.cameraCutoutFade = rendering.cameraCutoutFade;
+  }
+  if (Number.isFinite(rendering.cameraCutoutNormalY)) {
+    renderingOut.cameraCutoutNormalY = rendering.cameraCutoutNormalY;
+  }
+  if (Number.isFinite(rendering.cameraCutoutDitherScale)) {
+    renderingOut.cameraCutoutDitherScale = rendering.cameraCutoutDitherScale;
+  }
   if (Object.keys(renderingOut).length > 0) {
     level.rendering = renderingOut;
   }

@@ -372,6 +372,31 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
     }
   }
   const rendering = worldRef.resources.rendering;
+  const cameraCell = {
+    x: Math.floor(cameraPos.x),
+    y: Math.floor(cameraPos.y),
+    z: Math.floor(cameraPos.z),
+  };
+  const insideBlock =
+    Game.utils.isBlockAt(worldRef, cameraCell.x, cameraCell.y, cameraCell.z);
+  const cutoutEnabled = rendering?.cameraCutout !== false;
+  const cutActive = cutoutEnabled && insideBlock;
+  const cutDepth =
+    typeof rendering?.cameraCutoutDepth === "number"
+      ? rendering.cameraCutoutDepth
+      : Game.config.gridSize * 0.6;
+  const cutFade =
+    typeof rendering?.cameraCutoutFade === "number"
+      ? rendering.cameraCutoutFade
+      : Game.config.gridSize * 0.2;
+  const cutNormalY =
+    typeof rendering?.cameraCutoutNormalY === "number"
+      ? rendering.cameraCutoutNormalY
+      : 0.4;
+  const ditherScale =
+    typeof rendering?.cameraCutoutDitherScale === "number"
+      ? rendering.cameraCutoutDitherScale
+      : 1;
   const cullDistance = rendering?.blockCullDistance ?? 0;
   const cullPadding = rendering?.blockCullFovPadding ?? 0;
   const chunkSize = rendering?.blockChunkSize ?? 0;
@@ -396,6 +421,16 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
   if (chunkSize > 0) {
     if (!rendering.blockChunks) {
       Game.rendering.rebuildAllBlockChunks(worldRef);
+    }
+    const blockShader = renderState?.blockShader || null;
+    const useBlockShader = !!blockShader && cutActive;
+    if (useBlockShader) {
+      shader(blockShader);
+      blockShader.setUniform("uCutEnabled", 1);
+      blockShader.setUniform("uCutDepth", cutDepth);
+      blockShader.setUniform("uCutFade", cutFade);
+      blockShader.setUniform("uCutNormalY", cutNormalY);
+      blockShader.setUniform("uDitherScale", ditherScale);
     }
     const removeKeys = [];
     for (const [key, chunk] of rendering.blockChunks || []) {
@@ -427,7 +462,15 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
       }
       for (const entry of chunk.shapes.values()) {
         const color = entry.color || [110, 145, 110];
-        fill(color[0], color[1], color[2]);
+        if (useBlockShader) {
+          blockShader.setUniform("uColor", [
+            color[0] / 255,
+            color[1] / 255,
+            color[2] / 255,
+          ]);
+        } else {
+          fill(color[0], color[1], color[2]);
+        }
         if (
           entry.mode === "geometry" &&
           entry.geom &&
@@ -454,6 +497,9 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
     }
     for (const key of removeKeys) {
       rendering.blockChunks.delete(key);
+    }
+    if (useBlockShader) {
+      resetShader();
     }
   }
 

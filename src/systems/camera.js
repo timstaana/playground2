@@ -100,6 +100,82 @@ Game.systems.isCameraPathClear = function isCameraPathClear(
   return dx * dx + dy * dy + dz * dz < 1e-4;
 };
 
+Game.systems.getCameraMinDistance = function getCameraMinDistance(
+  worldRef,
+  follow,
+  lookAt
+) {
+  if (!worldRef || !follow || !lookAt) {
+    return null;
+  }
+  if (typeof follow.minDistance === "number") {
+    return Math.max(0, follow.minDistance);
+  }
+  const targetId = follow.target;
+  const collider = targetId
+    ? worldRef.components.Collider.get(targetId)
+    : null;
+  if (!collider) {
+    return null;
+  }
+  const fraction =
+    typeof follow.minVisibleFraction === "number"
+      ? follow.minVisibleFraction
+      : 0.5;
+  const visibleHeight = Math.max(0, collider.h * fraction);
+  if (visibleHeight <= 0) {
+    return null;
+  }
+  const fov = worldRef.resources?.cameraState?.fov ?? Math.PI / 3;
+  const base = visibleHeight / Math.tan(fov * 0.5);
+  const padding =
+    typeof follow.minDistancePadding === "number"
+      ? follow.minDistancePadding
+      : 0.1;
+  return Math.max(0, base + padding);
+};
+
+Game.systems.applyCameraMinDistance = function applyCameraMinDistance(
+  worldRef,
+  follow,
+  lookAt,
+  desired,
+  current
+) {
+  const minDist = Game.systems.getCameraMinDistance(
+    worldRef,
+    follow,
+    lookAt
+  );
+  if (!minDist || !desired || !current) {
+    return current;
+  }
+  const dir = {
+    x: desired.x - lookAt.x,
+    y: desired.y - lookAt.y,
+    z: desired.z - lookAt.z,
+  };
+  const desiredDist = Math.hypot(dir.x, dir.y, dir.z);
+  if (desiredDist <= 1e-6) {
+    return current;
+  }
+  const currentDist = Math.hypot(
+    current.x - lookAt.x,
+    current.y - lookAt.y,
+    current.z - lookAt.z
+  );
+  const targetDist = Math.min(desiredDist, minDist);
+  if (currentDist >= targetDist - 1e-4) {
+    return current;
+  }
+  const scale = targetDist / desiredDist;
+  return {
+    x: lookAt.x + dir.x * scale,
+    y: lookAt.y + dir.y * scale,
+    z: lookAt.z + dir.z * scale,
+  };
+};
+
 Game.systems.getCameraAvoidedPosition = function getCameraAvoidedPosition(
   worldRef,
   lookAt,
@@ -119,11 +195,27 @@ Game.systems.getCameraAvoidedPosition = function getCameraAvoidedPosition(
   const maxY =
     typeof follow?.avoidMaxY === "number" ? follow.avoidMaxY : null;
 
-  if (!avoidStep || avoidStep <= 0 || !avoidMax || avoidMax <= 0) {
+  if (Game.systems.isCameraPathClear(worldRef, lookAt, desired)) {
     return { pos: desired, offsetY: 0 };
   }
 
-  if (Game.systems.isCameraPathClear(worldRef, lookAt, desired)) {
+    let clamped = Game.systems.clampCameraToBlocks(worldRef, lookAt, desired);
+    clamped = Game.systems.applyCameraMinDistance(
+      worldRef,
+      follow,
+      lookAt,
+      desired,
+      clamped
+    );
+    if (
+      Math.abs(clamped.x - desired.x) > 1e-4 ||
+      Math.abs(clamped.y - desired.y) > 1e-4 ||
+      Math.abs(clamped.z - desired.z) > 1e-4
+    ) {
+      return { pos: clamped, offsetY: 0 };
+    }
+
+  if (!avoidStep || avoidStep <= 0 || !avoidMax || avoidMax <= 0) {
     return { pos: desired, offsetY: 0 };
   }
 
@@ -464,10 +556,17 @@ Game.systems.cameraSystem = function cameraSystem(worldRef) {
       worldRef.components.CameraRig.set(cameraId, rig);
     }
 
-    const clamped = Game.systems.clampCameraToBlocks(
+    let clamped = Game.systems.clampCameraToBlocks(
       worldRef,
       lookAt,
       desired
+    );
+    clamped = Game.systems.applyCameraMinDistance(
+      worldRef,
+      follow,
+      lookAt,
+      desired,
+      clamped
     );
     const adjusted = {
       x: lerp(desired.x, clamped.x, dialogueBlend),
