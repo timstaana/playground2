@@ -323,6 +323,95 @@ Game.rendering.isChunkVisible = function isChunkVisible(
   return dot >= Math.cos(maxAngle);
 };
 
+Game.systems.drawPlayerShadow = function drawPlayerShadow(worldRef) {
+  if (!worldRef?.resources?.blockSet || typeof createGraphics !== "function") {
+    return;
+  }
+  const playerId = worldRef.resources.playerId;
+  if (!playerId) {
+    return;
+  }
+  const transform = worldRef.components.Transform.get(playerId);
+  const collider = worldRef.components.Collider.get(playerId);
+  if (!transform || !collider) {
+    return;
+  }
+
+  const size = Game.config.gridSize;
+  const radius = Math.min(collider.w, collider.d) * 0.35;
+  const maxDrop = 4;
+  const fadeOut = 3;
+
+  const minX = Math.floor(transform.pos.x - radius - 0.5);
+  const maxX = Math.floor(transform.pos.x + radius + 0.5);
+  const minZ = Math.floor(transform.pos.z - radius - 0.5);
+  const maxZ = Math.floor(transform.pos.z + radius + 0.5);
+  const startY = Math.floor(transform.pos.y - 0.001);
+
+  if (
+    !Game.rendering.playerShadowGfx ||
+    Game.rendering.playerShadowGfx.width !== size
+  ) {
+    Game.rendering.playerShadowGfx = createGraphics(size, size);
+    Game.rendering.playerShadowGfx.pixelDensity(1);
+  }
+  const gfx = Game.rendering.playerShadowGfx;
+
+  blendMode(BLEND);
+
+  for (let y = startY; y >= startY - maxDrop; y -= 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      for (let z = minZ; z <= maxZ; z += 1) {
+        if (!Game.utils.isBlockAt(worldRef, x, y, z)) {
+          continue;
+        }
+        if (Game.utils.isBlockAt(worldRef, x, y + 1, z)) {
+          continue;
+        }
+        const topY = y + 1;
+        const drop = transform.pos.y - topY;
+        if (drop < -0.01 || drop > fadeOut) {
+          continue;
+        }
+
+        const dx = Math.max(Math.abs(transform.pos.x - (x + 0.5)) - 0.5, 0);
+        const dz = Math.max(Math.abs(transform.pos.z - (z + 0.5)) - 0.5, 0);
+        if (dx * dx + dz * dz > radius * radius) {
+          continue;
+        }
+
+        const alpha = Math.floor(120 * (1 - drop / fadeOut));
+        const centerX = size * 0.5 + (transform.pos.x - (x + 0.5)) * size;
+        const centerY = size * 0.5 + (transform.pos.z - (z + 0.5)) * size;
+        gfx.clear();
+        gfx.noStroke();
+        gfx.fill(0, 0, 0, alpha);
+        gfx.ellipse(
+          centerX,
+          centerY,
+          radius * 2 * size,
+          radius * 2 * size
+        );
+
+        const worldPos = Game.utils.gameToWorld({
+          x: x + 0.5,
+          y: topY + 0.0025,
+          z: z + 0.5,
+        });
+        push();
+        translate(worldPos.x, worldPos.y, worldPos.z);
+        rotateX(Math.PI / 2);
+        noStroke();
+        texture(gfx);
+        plane(size, size);
+        pop();
+      }
+    }
+  }
+
+  Game.rendering.clearTexture();
+};
+
 Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
   noLights();
 
@@ -503,6 +592,8 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
       resetShader();
     }
   }
+
+  Game.systems.drawPlayerShadow?.(worldRef);
 
   for (const [entity, renderable] of worldRef.components.Renderable.entries()) {
     const transform = worldRef.components.Transform.get(entity);

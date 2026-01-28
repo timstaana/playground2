@@ -1616,7 +1616,7 @@
       "backKey": "playerBack",
       "width": 1,
       "height": 1.5,
-      "offsetY": 0.75,
+      "offsetY": 0.7,
       "fps": 12,
       "idleFrame": 0,
       "alphaCutoff": 0.4
