@@ -25,9 +25,22 @@ Game.assets.loadFontAsync = function loadFontAsync(path) {
   return Promise.resolve(loadFont(path));
 };
 
-Game.assets.buildSpriteTexture = function buildSpriteTexture(img) {
+Game.assets.buildSpriteTexture = function buildSpriteTexture(img, options = {}) {
   if (!img || !img.width || !img.height) {
     throw new Error("Invalid image dimensions");
+  }
+  const forceGraphics = options.forceGraphics === true;
+  const frameCount =
+    typeof img.numFrames === "function" ? img.numFrames() : img.numFrames;
+  const isAnimated = typeof frameCount === "number" && frameCount > 1;
+  if (!forceGraphics && !isAnimated) {
+    return {
+      source: img,
+      texture: img,
+      lastFrame: -1,
+      staticDrawn: true,
+      direct: true,
+    };
   }
   const gfx = createGraphics(img.width, img.height);
   gfx.pixelDensity(1);
@@ -38,12 +51,13 @@ Game.assets.buildSpriteTexture = function buildSpriteTexture(img) {
     texture: gfx,
     lastFrame: -1,
     staticDrawn: true,
+    direct: false,
   };
 };
 
 Game.assets.loadSpriteTexture = async function loadSpriteTexture(path) {
   const img = await Game.assets.loadImageAsync(path);
-  return Game.assets.buildSpriteTexture(img);
+  return Game.assets.buildSpriteTexture(img, { forceGraphics: true });
 };
 
 Game.assets.loadAssets = async function loadAssets(level) {
@@ -51,6 +65,12 @@ Game.assets.loadAssets = async function loadAssets(level) {
   const frontPath = playerSprite.front || "assets/player_front.gif";
   const backPath = playerSprite.back || "assets/player_back.gif";
   const uiFontPath = level.uiFont || "assets/opensans.ttf";
+  const streaming = level.paintingStreaming || level.streaming || {};
+  const preloadAnimated =
+    streaming.preloadAnimated ??
+    streaming.preloadAnimatedPaintings ??
+    true;
+  const preloadAll = streaming.preloadAllPaintings ?? false;
   const missing = [];
   const paintings = {};
 
@@ -91,6 +111,37 @@ Game.assets.loadAssets = async function loadAssets(level) {
     console.warn(`Missing font: ${uiFontPath}`, err);
     missing.push(uiFontPath);
     font = null;
+  }
+
+  const paintingDefs = Array.isArray(level.paintings) ? level.paintings : [];
+  for (let i = 0; i < paintingDefs.length; i += 1) {
+    const painting = paintingDefs[i] || {};
+    const imagePath = painting.image || painting.src;
+    if (!imagePath) {
+      continue;
+    }
+    const lower = typeof imagePath === "string" ? imagePath.toLowerCase() : "";
+    const isAnimated =
+      painting.animate === true || lower.endsWith(".gif");
+    const shouldPreload =
+      preloadAll || painting.preload === true || (preloadAnimated && isAnimated);
+    if (!shouldPreload) {
+      continue;
+    }
+    const textureKey =
+      painting.textureKey ||
+      painting.key ||
+      painting.id ||
+      `painting-${i + 1}`;
+    if (paintings[textureKey]) {
+      continue;
+    }
+    try {
+      paintings[textureKey] = await Game.assets.loadSpriteTexture(imagePath);
+    } catch (err) {
+      console.warn(`Missing painting: ${imagePath}`, err);
+      missing.push(imagePath);
+    }
   }
 
   return { front, back, paintings, missing, uiFont: font };

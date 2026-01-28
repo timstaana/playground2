@@ -68,6 +68,7 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
   const playerTurnSpeed = playerDef.turnSpeed ?? 2.6;
   const jumpHeight = playerDef.jumpHeight ?? 1.5;
   const spawn = playerDef.spawn || { x: 2.5, y: 1, z: 2.5 };
+  const playerYaw = Number.isFinite(playerDef.yaw) ? playerDef.yaw : 0;
 
   worldRef.resources.rendering.blockCullDistance =
     renderingDef.blockCullDistance ??
@@ -128,6 +129,19 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
       streamingDef.maxConcurrent ??
       streamingDef.paintingMaxConcurrent ??
       paintingStreaming.maxConcurrent;
+    paintingStreaming.maxAnimatedConcurrent =
+      streamingDef.maxAnimatedConcurrent ??
+      paintingStreaming.maxAnimatedConcurrent;
+    paintingStreaming.deferAnimatedWhileMoving =
+      streamingDef.deferAnimatedWhileMoving ??
+      paintingStreaming.deferAnimatedWhileMoving;
+    paintingStreaming.preloadAnimated =
+      streamingDef.preloadAnimated ??
+      streamingDef.preloadAnimatedPaintings ??
+      paintingStreaming.preloadAnimated;
+    paintingStreaming.preloadAllPaintings =
+      streamingDef.preloadAllPaintings ??
+      paintingStreaming.preloadAllPaintings;
   }
 
   const blocks = level.blocks || [];
@@ -174,7 +188,7 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
   const player = Game.ecs.createEntity(worldRef);
   Game.ecs.addComponent(worldRef, "Transform", player, {
     pos: { x: spawn.x, y: spawn.y, z: spawn.z },
-    rotY: 0,
+    rotY: playerYaw,
   });
   Game.ecs.addComponent(worldRef, "Velocity", player, { x: 0, y: 0, z: 0 });
   Game.ecs.addComponent(worldRef, "MoveIntent", player, {

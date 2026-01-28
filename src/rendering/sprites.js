@@ -7,6 +7,9 @@ Game.rendering.isValidTexture = function isValidTexture(tex) {
   }
   if (typeof p5 !== "undefined") {
     if (typeof p5.Image === "function" && tex instanceof p5.Image) {
+      if (tex.width > 0 && tex.height > 0) {
+        return true;
+      }
       return !!tex._pInst;
     }
     if (typeof p5.Graphics === "function" && tex instanceof p5.Graphics) {
@@ -38,7 +41,7 @@ Game.rendering.updateSpriteTexture = function updateSpriteTexture(
 ) {
   const img = spriteTex.source;
   const gfx = spriteTex.texture;
-  if (!img || !gfx) {
+  if (!img || !gfx || gfx === img || spriteTex.direct) {
     return;
   }
 

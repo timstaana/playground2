@@ -539,6 +539,16 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
       }
 
       if (worldRef.components.Painting.has(entity)) {
+        Game.systems.drawPaintingPlaceholder?.(worldRef, {
+          entity,
+          transform,
+          collider,
+          sprite,
+          renderable,
+          worldPos,
+          billboardYaw,
+          billboardPitch,
+        });
         continue;
       }
     }
@@ -916,6 +926,61 @@ Game.systems.drawPaintingLoadingIndicators =
       pop();
     }
   };
+
+Game.systems.drawPaintingPlaceholder = function drawPaintingPlaceholder(
+  worldRef,
+  info
+) {
+  if (!worldRef || !info) {
+    return;
+  }
+  const transform = info.transform;
+  const collider = info.collider;
+  const sprite = info.sprite;
+  if (!transform || !collider || !sprite) {
+    return;
+  }
+  const worldPos = info.worldPos;
+  const yaw = info.billboardYaw ?? transform.rotY ?? 0;
+  const pitch = info.billboardPitch ?? 0;
+  const label = worldRef.components.Label.get(info.entity);
+  const baseColor = Array.isArray(info.renderable?.color)
+    ? info.renderable.color
+    : [220, 220, 220];
+  const accentColor =
+    label && Array.isArray(label.color) ? label.color : [120, 120, 120];
+  const fillColor = [
+    Math.min(255, baseColor[0] * 0.85 + 30),
+    Math.min(255, baseColor[1] * 0.85 + 30),
+    Math.min(255, baseColor[2] * 0.85 + 30),
+  ];
+  const grid = Game.config.gridSize;
+  const width = (sprite.width ?? collider.w) * grid;
+  const height = (sprite.height ?? collider.h) * grid;
+  const depth = (sprite.placeholderDepth ?? 0.04) * grid;
+
+  Game.rendering.clearTexture();
+  push();
+  translate(worldPos.x, worldPos.y, worldPos.z);
+  rotateY(yaw);
+  rotateX(pitch);
+
+  noStroke();
+  fill(fillColor[0], fillColor[1], fillColor[2]);
+  box(width, height, depth);
+
+  stroke(accentColor[0], accentColor[1], accentColor[2]);
+  strokeWeight(1.5);
+  noFill();
+  box(width * 1.01, height * 1.01, depth * 1.05);
+
+  const halfW = width * 0.5;
+  const halfH = height * 0.5;
+  const z = depth * 0.6;
+  line(-halfW, -halfH, z, halfW, halfH, z);
+  line(-halfW, halfH, z, halfW, -halfH, z);
+  pop();
+};
 
 Game.systems.drawCharacterLabels = function drawCharacterLabels(
   worldRef,

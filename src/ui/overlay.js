@@ -25,6 +25,305 @@ Game.ui.ensureOverlay = function ensureOverlay() {
   Game.ui.resizeOverlay();
 };
 
+Game.ui.ensureEditorPanel = function ensureEditorPanel() {
+  if (Game.ui.editorPanel) {
+    return;
+  }
+  const panel = document.createElement("div");
+  panel.id = "editor-panel";
+  panel.style.position = "fixed";
+  panel.style.right = "16px";
+  panel.style.top = "52px";
+  panel.style.width = "280px";
+  panel.style.maxHeight = "70vh";
+  panel.style.display = "none";
+  panel.style.flexDirection = "column";
+  panel.style.gap = "8px";
+  panel.style.padding = "10px";
+  panel.style.background = "rgba(12, 14, 18, 0.92)";
+  panel.style.border = "1px solid rgba(255, 255, 255, 0.08)";
+  panel.style.borderRadius = "8px";
+  panel.style.color = "#e8f0f7";
+  panel.style.fontFamily = Game.ui.fontFamily;
+  panel.style.zIndex = "20";
+  panel.style.pointerEvents = "auto";
+  panel.style.backdropFilter = "blur(4px)";
+
+  const header = document.createElement("div");
+  header.style.fontWeight = "600";
+  header.style.fontSize = "12px";
+  header.style.letterSpacing = "0.02em";
+  header.style.opacity = "0.85";
+  header.textContent = "Entity";
+
+  const textarea = document.createElement("textarea");
+  textarea.style.width = "100%";
+  textarea.style.minHeight = "200px";
+  textarea.style.maxHeight = "40vh";
+  textarea.style.resize = "vertical";
+  textarea.style.background = "rgba(5, 6, 8, 0.9)";
+  textarea.style.border = "1px solid rgba(255, 255, 255, 0.08)";
+  textarea.style.borderRadius = "6px";
+  textarea.style.color = "#dfe7ef";
+  textarea.style.fontSize = "11px";
+  textarea.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+  textarea.style.padding = "8px";
+  textarea.spellcheck = false;
+
+  const status = document.createElement("div");
+  status.style.fontSize = "11px";
+  status.style.opacity = "0.7";
+  status.style.minHeight = "14px";
+
+  const buttonRow = document.createElement("div");
+  buttonRow.style.display = "flex";
+  buttonRow.style.gap = "8px";
+
+  const apply = document.createElement("button");
+  apply.textContent = "Apply";
+  apply.style.flex = "1";
+  apply.style.padding = "6px 8px";
+  apply.style.borderRadius = "6px";
+  apply.style.border = "1px solid rgba(255, 255, 255, 0.12)";
+  apply.style.background = "rgba(30, 140, 255, 0.85)";
+  apply.style.color = "#fff";
+  apply.style.cursor = "pointer";
+
+  const close = document.createElement("button");
+  close.textContent = "Close";
+  close.style.flex = "1";
+  close.style.padding = "6px 8px";
+  close.style.borderRadius = "6px";
+  close.style.border = "1px solid rgba(255, 255, 255, 0.12)";
+  close.style.background = "rgba(60, 60, 60, 0.6)";
+  close.style.color = "#fff";
+  close.style.cursor = "pointer";
+
+  buttonRow.appendChild(apply);
+  buttonRow.appendChild(close);
+
+  panel.appendChild(header);
+  panel.appendChild(textarea);
+  panel.appendChild(status);
+  panel.appendChild(buttonRow);
+  document.body.appendChild(panel);
+
+  const stopPanelEvent = (event) => {
+    event.stopPropagation();
+  };
+  const blockPanelContext = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  panel.addEventListener("mousedown", stopPanelEvent);
+  panel.addEventListener("mouseup", stopPanelEvent);
+  panel.addEventListener("wheel", stopPanelEvent);
+  panel.addEventListener("contextmenu", blockPanelContext);
+
+  Game.ui.editorPanel = {
+    container: panel,
+    header,
+    textarea,
+    status,
+    apply,
+    close,
+    selectionKey: null,
+    visible: false,
+    worldRef: null,
+    userHiddenKey: null,
+    isEditing: false,
+    isDirty: false,
+  };
+
+  textarea.addEventListener("focus", () => {
+    const panelState = Game.ui.editorPanel;
+    if (panelState) {
+      panelState.isEditing = true;
+    }
+  });
+
+  textarea.addEventListener("blur", () => {
+    const panelState = Game.ui.editorPanel;
+    if (panelState) {
+      panelState.isEditing = false;
+    }
+  });
+
+  textarea.addEventListener("input", () => {
+    const panelState = Game.ui.editorPanel;
+    if (panelState) {
+      panelState.isDirty = true;
+      panelState.status.textContent = "";
+    }
+  });
+
+  close.addEventListener("click", () => {
+    const panelState = Game.ui.editorPanel;
+    panelState.visible = false;
+    panelState.userHiddenKey = panelState.selectionKey;
+    panel.style.display = "none";
+  });
+
+  apply.addEventListener("click", () => {
+    const panelState = Game.ui.editorPanel;
+    if (!panelState || !panelState.selectionKey) {
+      return;
+    }
+    const worldRef = panelState.worldRef;
+    const editor = worldRef?.resources?.editor;
+    const selection = Game.systems?.getEditorSelection?.(worldRef, editor);
+    if (!worldRef || !selection) {
+      panelState.status.textContent = "No selection.";
+      return;
+    }
+    try {
+      const payload = JSON.parse(panelState.textarea.value);
+      const result = Game.systems.applyEditorEntityJson(
+        worldRef,
+        selection,
+        payload
+      );
+      if (result?.ok) {
+        panelState.status.textContent = "Applied.";
+        panelState.isDirty = false;
+      } else {
+        panelState.status.textContent = result?.message || "Apply failed.";
+      }
+    } catch (err) {
+      panelState.status.textContent = "Invalid JSON.";
+    }
+  });
+
+};
+
+Game.ui.ensureEditorToolbar = function ensureEditorToolbar() {
+  if (Game.ui.editorToolbar) {
+    return;
+  }
+  const bar = document.createElement("div");
+  bar.id = "editor-toolbar";
+  bar.style.position = "fixed";
+  bar.style.right = "16px";
+  bar.style.top = "12px";
+  bar.style.display = "none";
+  bar.style.gap = "8px";
+  bar.style.zIndex = "20";
+  bar.style.pointerEvents = "auto";
+  bar.style.fontFamily = Game.ui.fontFamily;
+
+  const copyBtn = document.createElement("button");
+  copyBtn.textContent = "Copy JSON";
+  copyBtn.style.padding = "6px 10px";
+  copyBtn.style.borderRadius = "6px";
+  copyBtn.style.border = "1px solid rgba(255, 255, 255, 0.12)";
+  copyBtn.style.background = "rgba(60, 60, 60, 0.7)";
+  copyBtn.style.color = "#fff";
+  copyBtn.style.cursor = "pointer";
+
+  const exportBtn = document.createElement("button");
+  exportBtn.textContent = "Export";
+  exportBtn.style.padding = "6px 10px";
+  exportBtn.style.borderRadius = "6px";
+  exportBtn.style.border = "1px solid rgba(255, 255, 255, 0.12)";
+  exportBtn.style.background = "rgba(20, 180, 130, 0.85)";
+  exportBtn.style.color = "#fff";
+  exportBtn.style.cursor = "pointer";
+
+  bar.appendChild(copyBtn);
+  bar.appendChild(exportBtn);
+  document.body.appendChild(bar);
+
+  const stopToolbarEvent = (event) => {
+    event.stopPropagation();
+  };
+  const blockToolbarContext = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  bar.addEventListener("mousedown", stopToolbarEvent);
+  bar.addEventListener("mouseup", stopToolbarEvent);
+  bar.addEventListener("wheel", stopToolbarEvent);
+  bar.addEventListener("contextmenu", blockToolbarContext);
+
+  Game.ui.editorToolbar = {
+    container: bar,
+    copyBtn,
+    exportBtn,
+    worldRef: null,
+  };
+
+  copyBtn.addEventListener("click", async () => {
+    const toolbar = Game.ui.editorToolbar;
+    const panel = Game.ui.editorPanel;
+    const worldRef = toolbar.worldRef;
+    if (!worldRef || !Game.systems?.exportLevelData) {
+      if (panel) {
+        panel.status.textContent = "No world to copy.";
+      }
+      return;
+    }
+    const payload = Game.systems.exportLevelData(worldRef);
+    if (!payload) {
+      if (panel) {
+        panel.status.textContent = "Copy failed.";
+      }
+      return;
+    }
+    const json = JSON.stringify(payload, null, 2);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(json);
+      } else {
+        const temp = document.createElement("textarea");
+        temp.value = json;
+        temp.style.position = "fixed";
+        temp.style.opacity = "0";
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand("copy");
+        document.body.removeChild(temp);
+      }
+      if (panel) {
+        panel.status.textContent = "Copied level JSON.";
+      }
+    } catch (err) {
+      if (panel) {
+        panel.status.textContent = "Copy failed.";
+      }
+    }
+  });
+
+  exportBtn.addEventListener("click", () => {
+    const toolbar = Game.ui.editorToolbar;
+    const panel = Game.ui.editorPanel;
+    const worldRef = toolbar.worldRef;
+    if (!worldRef || !Game.systems?.exportLevelData) {
+      if (panel) {
+        panel.status.textContent = "No world to export.";
+      }
+      return;
+    }
+    const payload = Game.systems.exportLevelData(worldRef);
+    if (!payload) {
+      if (panel) {
+        panel.status.textContent = "Export failed.";
+      }
+      return;
+    }
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "level-export.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    if (panel) {
+      panel.status.textContent = "Exported level-export.json.";
+    }
+  });
+};
+
 Game.ui.resizeOverlay = function resizeOverlay() {
   const overlay = Game.ui.overlay;
   if (!overlay || !overlay.canvas) {
@@ -68,6 +367,8 @@ Game.ui.wrapText = function wrapText(ctx, text, maxWidth) {
 
 Game.ui.renderDialogueOverlay = function renderDialogueOverlay(worldRef) {
   Game.ui.ensureOverlay();
+  Game.ui.ensureEditorPanel();
+  Game.ui.ensureEditorToolbar();
   const overlay = Game.ui.overlay;
   if (!overlay || !overlay.ctx) {
     return;
@@ -166,6 +467,67 @@ Game.ui.renderDialogueOverlay = function renderDialogueOverlay(worldRef) {
 
   Game.ui.renderDebugHud?.(ctx);
   Game.ui.renderTouchControls?.();
+  Game.ui.updateEditorPanel?.(worldRef);
+};
+
+Game.ui.updateEditorPanel = function updateEditorPanel(worldRef) {
+  const panel = Game.ui.editorPanel;
+  if (!panel) {
+    return;
+  }
+  const debugMode = Game.debug?.mode ?? 0;
+  if (!worldRef || debugMode <= 0) {
+    panel.visible = false;
+    panel.container.style.display = "none";
+    if (Game.ui.editorToolbar) {
+      Game.ui.editorToolbar.container.style.display = "none";
+    }
+    return;
+  }
+  const editor = worldRef.resources?.editor;
+  const selection = Game.systems?.getEditorSelection?.(worldRef, editor);
+  if (!selection) {
+    panel.visible = false;
+    panel.container.style.display = "none";
+    if (Game.ui.editorToolbar) {
+      Game.ui.editorToolbar.container.style.display = "none";
+    }
+    return;
+  }
+  const key = `${selection.type}:${selection.entity}`;
+  if (panel.userHiddenKey === key) {
+    panel.visible = false;
+    panel.container.style.display = "none";
+    if (Game.ui.editorToolbar) {
+      Game.ui.editorToolbar.container.style.display = "none";
+    }
+    return;
+  }
+  panel.worldRef = worldRef;
+  panel.visible = true;
+  panel.container.style.display = "flex";
+  if (Game.ui.editorToolbar) {
+    Game.ui.editorToolbar.worldRef = worldRef;
+    Game.ui.editorToolbar.container.style.display = "flex";
+  }
+  panel.header.textContent =
+    selection.type === "block"
+      ? `Block ${selection.entity}`
+      : `Entity ${selection.entity}`;
+  if (panel.selectionKey !== key) {
+    panel.selectionKey = key;
+    panel.userHiddenKey = null;
+    panel.status.textContent = "";
+    const payload = Game.systems.buildEditorEntityJson(worldRef, selection);
+    panel.textarea.value = payload ? JSON.stringify(payload, null, 2) : "{}";
+    panel.isDirty = false;
+  } else if (!panel.isEditing && !panel.isDirty) {
+    const payload = Game.systems.buildEditorEntityJson(worldRef, selection);
+    const nextValue = payload ? JSON.stringify(payload, null, 2) : "{}";
+    if (panel.textarea.value !== nextValue) {
+      panel.textarea.value = nextValue;
+    }
+  }
 };
 
 Game.ui.renderDebugHud = function renderDebugHud(ctx) {
