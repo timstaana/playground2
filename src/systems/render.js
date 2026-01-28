@@ -987,7 +987,7 @@ Game.systems.drawPaintingPlaceholder = function drawPaintingPlaceholder(
     return;
   }
   const worldPos = info.worldPos;
-  const yaw = info.billboardYaw ?? transform.rotY ?? 0;
+  const yaw = (info.billboardYaw ?? transform.rotY ?? 0) + Math.PI;
   const pitch = info.billboardPitch ?? 0;
   const label = worldRef.components.Label.get(info.entity);
   const baseColor = Array.isArray(info.renderable?.color)

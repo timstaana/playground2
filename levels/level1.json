@@ -19,7 +19,7 @@
     "maxConcurrent": 2,
     "maxAnimatedConcurrent": 1,
     "deferAnimatedWhileMoving": true,
-    "preloadAnimated": true,
+    "preloadAnimated": false,
     "preloadAllPaintings": false
   },
   "blocks": [
@@ -964,16 +964,6 @@
       ]
     },
     {
-      "x": 5,
-      "y": 2,
-      "z": 4,
-      "color": [
-        110,
-        145,
-        110
-      ]
-    },
-    {
       "x": 6,
       "y": 2,
       "z": 4,
@@ -1097,16 +1087,6 @@
       "x": 6,
       "y": 3,
       "z": -1,
-      "color": [
-        110,
-        145,
-        110
-      ]
-    },
-    {
-      "x": 5,
-      "y": 3,
-      "z": 3,
       "color": [
         110,
         145,
@@ -1616,11 +1596,11 @@
   ],
   "player": {
     "spawn": {
-      "x": 2.7785555461126688,
+      "x": 10.227129613167714,
       "y": 1,
-      "z": 1.165911919278315
+      "z": 1.1318976482770313
     },
-    "yaw": -2.157727346410212,
+    "yaw": -39.53480734641045,
     "size": {
       "w": 0.8,
       "d": 0.8,
@@ -1629,7 +1609,7 @@
     "speed": 4.5,
     "turnSpeed": 2.6,
     "jumpHeight": 1.5,
-    "label": "player-p227",
+    "label": "player-p1",
     "labelOffsetY": 0.1,
     "sprite": {
       "frontKey": "playerFront",

@@ -74,7 +74,7 @@ Game.ecs.createWorld = function createWorld() {
         maxConcurrent: 2,
         maxAnimatedConcurrent: 1,
         deferAnimatedWhileMoving: true,
-        preloadAnimated: true,
+        preloadAnimated: false,
         preloadAllPaintings: false,
         loading: new Map(),
         failed: new Set(),

@@ -69,7 +69,7 @@ Game.assets.loadAssets = async function loadAssets(level) {
   const preloadAnimated =
     streaming.preloadAnimated ??
     streaming.preloadAnimatedPaintings ??
-    true;
+    false;
   const preloadAll = streaming.preloadAllPaintings ?? false;
   const missing = [];
   const paintings = {};
