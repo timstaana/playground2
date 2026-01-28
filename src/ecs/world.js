@@ -92,10 +92,12 @@ Game.ecs.createWorld = function createWorld() {
         id: null,
         name: null,
         socket: null,
-        sendInterval: 0.016,
+        sendInterval: 0.033,
         lastSentAt: 0,
         remoteEntities: new Map(),
         localState: null,
+        deferState: true,
+        stateEpsilon: 0.0001,
         smoothing: {
           local: 0.35,
           localRot: 0.35,

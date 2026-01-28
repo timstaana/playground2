@@ -52,15 +52,22 @@ Game.net.lerpFactor = function lerpFactor(base, dt) {
   return 1 - Math.pow(1 - base, scaled);
 };
 
-Game.net.normalizeState = function normalizeState(state, fallback) {
-  const pos = state.pos || fallback?.pos || { x: 0, y: 0, z: 0 };
-  const vel = state.vel || fallback?.vel || { x: 0, y: 0, z: 0 };
-  return {
-    pos: { x: pos.x ?? 0, y: pos.y ?? 0, z: pos.z ?? 0 },
-    rotY: typeof state.rotY === "number" ? state.rotY : fallback?.rotY ?? 0,
-    vel: { x: vel.x ?? 0, y: vel.y ?? 0, z: vel.z ?? 0 },
-    name: state.name ?? fallback?.name ?? null,
-  };
+Game.net.normalizeState = function normalizeState(state, fallback, target) {
+  const src = state || {};
+  const posSrc = src.pos || fallback?.pos || { x: 0, y: 0, z: 0 };
+  const velSrc = src.vel || fallback?.vel || { x: 0, y: 0, z: 0 };
+  const out = target || {};
+  const pos = out.pos || (out.pos = { x: 0, y: 0, z: 0 });
+  pos.x = posSrc.x ?? 0;
+  pos.y = posSrc.y ?? 0;
+  pos.z = posSrc.z ?? 0;
+  const vel = out.vel || (out.vel = { x: 0, y: 0, z: 0 });
+  vel.x = velSrc.x ?? 0;
+  vel.y = velSrc.y ?? 0;
+  vel.z = velSrc.z ?? 0;
+  out.rotY = typeof src.rotY === "number" ? src.rotY : fallback?.rotY ?? 0;
+  out.name = src.name ?? fallback?.name ?? null;
+  return out;
 };
 
 Game.net.connect = function connect(worldRef, options = {}) {
@@ -82,9 +89,19 @@ Game.net.connect = function connect(worldRef, options = {}) {
     options.authoritative ?? Game.config.network?.authoritative ?? net.authoritative;
   net.sendInterval =
     options.sendInterval ?? Game.config.network?.sendInterval ?? net.sendInterval;
+  net.deferState =
+    options.deferState ?? Game.config.network?.deferState ?? net.deferState ?? true;
+  net.stateEpsilon =
+    options.stateEpsilon ?? Game.config.network?.stateEpsilon ?? net.stateEpsilon ?? 0.0001;
   net.name = options.name || net.name || Game.net.getDefaultName(worldRef);
   net.remoteEntities = net.remoteEntities || new Map();
   net.localState = null;
+  net.pendingState = null;
+  net.seenPlayers = net.seenPlayers || new Set();
+  net.inputPayload = null;
+  net.statePayload = null;
+  net.lastInput = null;
+  net.lastState = null;
 
   const socket = new WebSocket(url);
   net.socket = socket;
@@ -112,6 +129,9 @@ Game.net.connect = function connect(worldRef, options = {}) {
     net.socket = null;
     net.id = null;
     net.localState = null;
+    net.pendingState = null;
+    net.lastInput = null;
+    net.lastState = null;
     Game.net.clearRemotePlayers(worldRef);
   });
 
@@ -149,6 +169,10 @@ Game.net.handleMessage = function handleMessage(worldRef, msg) {
   }
 
   if (msg.type === "state") {
+    if (net.deferState !== false) {
+      net.pendingState = msg;
+      return;
+    }
     Game.net.applyState(worldRef, msg.players || []);
   }
 };
@@ -158,7 +182,8 @@ Game.net.applyState = function applyState(worldRef, players) {
   if (!net || !net.id) {
     return;
   }
-  const seen = new Set();
+  const seen = net.seenPlayers || (net.seenPlayers = new Set());
+  seen.clear();
   for (const state of players) {
     if (!state || !state.id) {
       continue;
@@ -266,21 +291,26 @@ Game.net.updatePlayerFromState = function updatePlayerFromState(
     vel: vel ? { x: vel.x, y: vel.y, z: vel.z } : null,
     name: state?.name ?? null,
   };
-  const normalized = Game.net.normalizeState(state, fallback);
+  let normalized = null;
 
   if (isLocal) {
     if (net) {
+      normalized = Game.net.normalizeState(state, fallback, net.localState || {});
       net.localState = normalized;
+    } else {
+      normalized = Game.net.normalizeState(state, fallback);
     }
   } else {
     const remote = worldRef.components.RemotePlayer.get(entity);
     if (remote) {
-      if (!remote.target && transform) {
+      const hadTarget = !!remote.target;
+      normalized = Game.net.normalizeState(state, fallback, remote.target || {});
+      if (!hadTarget && transform) {
         transform.pos = { ...normalized.pos };
         transform.rotY = normalized.rotY;
         worldRef.components.Transform.set(entity, transform);
       }
-      if (!remote.target && vel) {
+      if (!hadTarget && vel) {
         vel.x = normalized.vel.x;
         vel.y = normalized.vel.y;
         vel.z = normalized.vel.z;
@@ -288,13 +318,14 @@ Game.net.updatePlayerFromState = function updatePlayerFromState(
       }
       remote.target = normalized;
       remote.lastSeen = typeof performance !== "undefined" ? performance.now() : Date.now();
-      worldRef.components.RemotePlayer.set(entity, remote);
+    } else {
+      normalized = Game.net.normalizeState(state, fallback);
     }
   }
 
-  if (normalized.name) {
+  if (normalized?.name) {
     const label = worldRef.components.Label.get(entity);
-    if (label) {
+    if (label && label.text !== normalized.name) {
       label.text = normalized.name;
       worldRef.components.Label.set(entity, label);
     }
@@ -320,6 +351,11 @@ Game.net.stepSmoothing = function stepSmoothing(worldRef, dt) {
   const net = worldRef.resources.network;
   if (!net || !net.connected) {
     return;
+  }
+  if (net.pendingState) {
+    const pending = net.pendingState;
+    net.pendingState = null;
+    Game.net.applyState(worldRef, pending.players || []);
   }
   const smoothing = net.smoothing || {};
   const localLerp = Game.net.lerpFactor(smoothing.local ?? 0.35, dt);
@@ -417,16 +453,33 @@ Game.systems.networkInputSystem = function networkInputSystem(worldRef) {
     return;
   }
 
-  const payload = {
-    type: "input",
-    turn: move.turn ?? 0,
-    throttle: move.throttle ?? 0,
-    jump: move.jumpRequested ? 1 : 0,
-  };
-
   try {
     if (net.authoritative) {
+      const payload =
+        net.inputPayload ||
+        (net.inputPayload = {
+          type: "input",
+          turn: 0,
+          throttle: 0,
+          jump: 0,
+        });
+      payload.turn = move.turn ?? 0;
+      payload.throttle = move.throttle ?? 0;
+      payload.jump = move.jumpRequested ? 1 : 0;
+      const last =
+        net.lastInput || (net.lastInput = { turn: null, throttle: null, jump: null });
+      const changed =
+        payload.turn !== last.turn ||
+        payload.throttle !== last.throttle ||
+        payload.jump !== last.jump;
+      if (!changed) {
+        net.lastSentAt = now;
+        return;
+      }
       net.socket.send(JSON.stringify(payload));
+      last.turn = payload.turn;
+      last.throttle = payload.throttle;
+      last.jump = payload.jump;
     } else {
       const playerId = worldRef.resources.playerId;
       const transform = playerId
@@ -434,14 +487,54 @@ Game.systems.networkInputSystem = function networkInputSystem(worldRef) {
         : null;
       const vel = playerId ? worldRef.components.Velocity.get(playerId) : null;
       if (transform) {
-        const statePayload = {
-          type: "state",
-          pos: transform.pos,
-          rotY: transform.rotY,
-          vel: vel ? { x: vel.x, y: vel.y, z: vel.z } : { x: 0, y: 0, z: 0 },
-          name: net.name,
-        };
+        const statePayload =
+          net.statePayload ||
+          (net.statePayload = {
+            type: "state",
+            pos: { x: 0, y: 0, z: 0 },
+            rotY: 0,
+            vel: { x: 0, y: 0, z: 0 },
+            name: null,
+          });
+        statePayload.pos.x = transform.pos.x;
+        statePayload.pos.y = transform.pos.y;
+        statePayload.pos.z = transform.pos.z;
+        statePayload.rotY = transform.rotY ?? 0;
+        statePayload.vel.x = vel ? vel.x : 0;
+        statePayload.vel.y = vel ? vel.y : 0;
+        statePayload.vel.z = vel ? vel.z : 0;
+        statePayload.name = net.name;
+        const last =
+          net.lastState ||
+          (net.lastState = {
+            pos: { x: 0, y: 0, z: 0 },
+            rotY: 0,
+            vel: { x: 0, y: 0, z: 0 },
+            name: null,
+          });
+        const eps = net.stateEpsilon ?? 0.0001;
+        const changed =
+          Math.abs(statePayload.pos.x - last.pos.x) > eps ||
+          Math.abs(statePayload.pos.y - last.pos.y) > eps ||
+          Math.abs(statePayload.pos.z - last.pos.z) > eps ||
+          Math.abs(statePayload.vel.x - last.vel.x) > eps ||
+          Math.abs(statePayload.vel.y - last.vel.y) > eps ||
+          Math.abs(statePayload.vel.z - last.vel.z) > eps ||
+          Math.abs(statePayload.rotY - last.rotY) > eps ||
+          statePayload.name !== last.name;
+        if (!changed) {
+          net.lastSentAt = now;
+          return;
+        }
         net.socket.send(JSON.stringify(statePayload));
+        last.pos.x = statePayload.pos.x;
+        last.pos.y = statePayload.pos.y;
+        last.pos.z = statePayload.pos.z;
+        last.rotY = statePayload.rotY;
+        last.vel.x = statePayload.vel.x;
+        last.vel.y = statePayload.vel.y;
+        last.vel.z = statePayload.vel.z;
+        last.name = statePayload.name;
       }
     }
     net.lastSentAt = now;

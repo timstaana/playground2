@@ -40,6 +40,9 @@ let nextPlayerId = 1;
 
 const TICK_RATE = Number(process.env.TICK_RATE) || 60;
 const TICK_DT = 1 / TICK_RATE;
+const BROADCAST_RATE = Number(process.env.BROADCAST_RATE) || 30;
+const BROADCAST_DT = BROADCAST_RATE > 0 ? 1 / BROADCAST_RATE : TICK_DT;
+let broadcastAccumulator = 0;
 
 function blockKey(x, y, z) {
   return `${x}|${y}|${z}`;
@@ -344,7 +347,11 @@ setInterval(() => {
   for (const player of players.values()) {
     simulatePlayer(player, TICK_DT);
   }
-  broadcastState();
+  broadcastAccumulator += TICK_DT;
+  if (broadcastAccumulator >= BROADCAST_DT) {
+    broadcastAccumulator -= BROADCAST_DT;
+    broadcastState();
+  }
 }, 1000 / TICK_RATE);
 
 server.listen(PORT, () => {
