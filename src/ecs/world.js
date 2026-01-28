@@ -59,6 +59,9 @@ Game.ecs.createWorld = function createWorld() {
         blockCullDistance: 25,
         blockCullFovPadding: 0.15,
         blockChunkSize: 16,
+        blockAoStrength: 0.2,
+        blockAoMin: 0.3,
+        blockAoPower: 1.4,
       },
       paintingStreaming: {
         loadRadius: 6,

@@ -151,18 +151,47 @@ Game.rendering.rebuildBlockChunk = function rebuildBlockChunk(
   const maxY = minY + size - 1;
   const maxZ = minZ + size - 1;
   const grid = Game.config.gridSize;
+  const rendering = worldRef.resources?.rendering || {};
   const blockIndex = worldRef.resources?.blockIndex || null;
   const shapes = new Map();
   let blockCount = 0;
   let faceCount = 0;
+  const aoStrengthRaw =
+    typeof rendering.blockAoStrength === "number"
+      ? rendering.blockAoStrength
+      : 0;
+  const aoStrength = Math.max(0, Math.min(aoStrengthRaw, 0.45));
+  const aoMin =
+    typeof rendering.blockAoMin === "number" ? rendering.blockAoMin : 0.3;
+  const aoEnabled = aoStrength > 0;
   const canBuildGeometry =
     typeof buildGeometry === "function" && typeof model === "function";
+
+  const faceRampShade = (normal) => {
+    if (!aoEnabled) {
+      return 1;
+    }
+    let ramp = 0.85;
+    if (normal[1] > 0.5) {
+      ramp = 1;
+    } else if (normal[1] < -0.5) {
+      ramp = 0.6;
+    }
+    const shade = 1 - aoStrength * (1 - ramp);
+    return Math.max(aoMin, shade);
+  };
 
   const ensureEntry = (color) => {
     const key = `${color[0]},${color[1]},${color[2]}`;
     let entry = shapes.get(key);
     if (!entry) {
-      entry = { mode: "data", color, verts: [], normals: [] };
+      entry = {
+        mode: "data",
+        color,
+        verts: [],
+        normals: [],
+        colors: null,
+      };
       shapes.set(key, entry);
     }
     return entry;
@@ -183,8 +212,7 @@ Game.rendering.rebuildBlockChunk = function rebuildBlockChunk(
         const collider = entity
           ? worldRef.components.Collider.get(entity)
           : null;
-        const color = renderable?.color || [110, 145, 110];
-        const entry = ensureEntry(color);
+        const baseColor = renderable?.color || [110, 145, 110];
 
         const halfX = (collider?.w ?? 1) * grid * 0.5;
         const halfY = (collider?.h ?? 1) * grid * 0.5;
@@ -206,6 +234,15 @@ Game.rendering.rebuildBlockChunk = function rebuildBlockChunk(
           ) {
             continue;
           }
+          const shade = faceRampShade(face.normal);
+          const faceColor = aoEnabled
+            ? [
+                Math.round(baseColor[0] * shade),
+                Math.round(baseColor[1] * shade),
+                Math.round(baseColor[2] * shade),
+              ]
+            : baseColor;
+          const entry = ensureEntry(faceColor);
           for (const vert of face.verts) {
             entry.normals.push(face.normal[0], face.normal[1], face.normal[2]);
             entry.verts.push(
@@ -288,7 +325,6 @@ Game.rendering.isChunkVisible = function isChunkVisible(
 
 Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
   noLights();
-  ambientLight(220);
 
   noStroke();
 
@@ -391,7 +427,6 @@ Game.systems.renderSystem = function renderSystem(worldRef, renderState) {
       }
       for (const entry of chunk.shapes.values()) {
         const color = entry.color || [110, 145, 110];
-        ambientMaterial(color[0], color[1], color[2]);
         fill(color[0], color[1], color[2]);
         if (
           entry.mode === "geometry" &&

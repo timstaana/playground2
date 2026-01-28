@@ -79,6 +79,18 @@ Game.level.buildLevel = function buildLevel(worldRef, level) {
     renderingDef.blockChunkSize ??
     renderingDef.chunkSize ??
     worldRef.resources.rendering.blockChunkSize;
+  worldRef.resources.rendering.blockAoStrength =
+    renderingDef.blockAoStrength ??
+    renderingDef.aoStrength ??
+    worldRef.resources.rendering.blockAoStrength;
+  worldRef.resources.rendering.blockAoMin =
+    renderingDef.blockAoMin ??
+    renderingDef.aoMin ??
+    worldRef.resources.rendering.blockAoMin;
+  worldRef.resources.rendering.blockAoPower =
+    renderingDef.blockAoPower ??
+    renderingDef.aoPower ??
+    worldRef.resources.rendering.blockAoPower;
   const interactionDefaults = {
     range: interactionDef.range ?? 1.5,
     requireFacing: interactionDef.requireFacing ?? true,

@@ -359,6 +359,16 @@ Game.systems.editorSystem = function editorSystem(worldRef) {
   if (!editor || !editor.enabled) {
     return;
   }
+  if (!Game.debug || Game.debug.mode <= 0) {
+    editor.hoveredBlock = null;
+    editor.pointerDown = false;
+    editor.pointerHeld = false;
+    editor.pointerHit = null;
+    editor.dragActive = false;
+    editor.dragEntity = null;
+    editor.dragCell = null;
+    return;
+  }
   Game.systems.ensureEditorBlockIndex(worldRef, editor);
   if (
     typeof mouseX !== "number" ||

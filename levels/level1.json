@@ -4,7 +4,10 @@
   "uiFont": "assets/opensans.ttf",
   "rendering": {
     "blockCullDistance": 25,
-    "blockCullFovPadding": 0.3
+    "blockCullFovPadding": 0.3,
+    "blockAoStrength": 0.5,
+    "blockAoMin": 0.35,
+    "blockAoPower": 1.6
   },
   "interaction": {
     "dialogueYOffset": 0,
